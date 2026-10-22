@@ -47,8 +47,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import '../assets/realism.js';
 window.__THREE = THREE;
 try {
-const scene=new THREE.Scene();scene.background=new THREE.Color(0x4a8f4a);scene.fog=new THREE.Fog(0x4a8f4a,30,80);
-const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,400);camera.position.set(0,9,28);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x4a8f4a);scene.fog=new THREE.Fog(0x4a8f4a,35,95);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,400);camera.position.set(0,8.5,26);
 const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.98;
 document.getElementById('app').appendChild(renderer.domElement);
@@ -59,33 +59,186 @@ const fx = Realism.setup(scene, renderer, camera, {
   bloom: 'gentle'
 });
 window.fx = fx;/* HDR from Realism.setup provides the environment */KidLib.ambience('forest');
-const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,2.5,0);controls.maxDistance=45;controls.minDistance=5;
-scene.add(new THREE.AmbientLight(0xffffff,0.85));
-const sun=new THREE.DirectionalLight(0xfff5d0,1.6);sun.position.set(10,18,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
-scene.add(new THREE.HemisphereLight(0xe0ffdc,0x3a5a2a,0.5));
-const ground=new THREE.Mesh(new THREE.CircleGeometry(24,48),new THREE.MeshStandardMaterial({color:0x3a7f3a,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
-// two trees with apples
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,3,0);controls.maxDistance=45;controls.minDistance=5;
+scene.add(new THREE.AmbientLight(0xffffff,0.7));
+const sun=new THREE.DirectionalLight(0xfff5d0,1.7);sun.position.set(10,18,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-22;sun.shadow.camera.right=22;sun.shadow.camera.top=22;sun.shadow.camera.bottom=-22;sun.shadow.camera.far=60;scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xe0ffdc,0x3a5a2a,0.55));
+
+// --- forest floor: grass texture + dirt clearing under trees ---
+const grassTex=(()=>{const c=document.createElement('canvas');c.width=c.height=512;const g=c.getContext('2d');g.fillStyle='#3f7f33';g.fillRect(0,0,512,512);for(let i=0;i<2600;i++){g.fillStyle=Math.random()<0.5?('rgba(20,50,15,'+(0.08+Math.random()*0.22)+')'):('rgba(120,190,80,'+(0.08+Math.random()*0.18)+')');g.beginPath();g.arc(Math.random()*512,Math.random()*512,1.5+Math.random()*5,0,7);g.fill();}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(4,4);return t;})();
+const ground=new THREE.Mesh(new THREE.CircleGeometry(30,56),new THREE.MeshStandardMaterial({map:grassTex,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+const clearing=new THREE.Mesh(new THREE.CircleGeometry(9.5,40),new THREE.MeshStandardMaterial({color:0x8a6f45,roughness:1}));clearing.rotation.x=-Math.PI/2;clearing.position.y=0.02;clearing.scale.set(1.4,1,0.8);clearing.receiveShadow=true;scene.add(clearing);
+
+// --- bark texture ---
+const barkTex=(()=>{const c=document.createElement('canvas');c.width=128;c.height=256;const g=c.getContext('2d');g.fillStyle='#6a4a2a';g.fillRect(0,0,128,256);for(let i=0;i<90;i++){g.fillStyle=Math.random()<0.5?'rgba(40,24,10,0.5)':'rgba(140,100,60,0.45)';const w=2+Math.random()*5;g.fillRect(Math.random()*128,Math.random()*256,w,12+Math.random()*40);}const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.wrapS=t.wrapT=THREE.RepeatWrapping;return t;})();
+
+// --- realistic apple: red body + brown stem + green leaf ---
+const appleColors=[0xd92b2b,0xe83a3a,0xc81f1f,0xe8542b];
+function makeApple(){
+  const g=new THREE.Group();
+  const bodyMat=new THREE.MeshStandardMaterial({color:appleColors[Math.floor(Math.random()*appleColors.length)],roughness:0.32,metalness:0.05});
+  const body=new THREE.Mesh(new THREE.SphereGeometry(0.3,20,20),bodyMat);
+  body.scale.set(1,0.92,1);body.castShadow=true;g.add(body);
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.045,0.24,8),new THREE.MeshStandardMaterial({color:0x4a2c12,roughness:0.9}));
+  stem.position.set(0.02,0.36,0);stem.rotation.z=-0.12;stem.castShadow=true;g.add(stem);
+  const leaf=new THREE.Mesh(new THREE.SphereGeometry(0.1,10,10),new THREE.MeshStandardMaterial({color:0x3fa33f,roughness:0.7}));
+  leaf.scale.set(1.5,0.35,0.7);leaf.position.set(0.15,0.42,0);leaf.rotation.z=-0.4;leaf.castShadow=true;g.add(leaf);
+  // tiny sun-kissed blush spot
+  const blush=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,10),new THREE.MeshStandardMaterial({color:0xffb347,roughness:0.5,transparent:true,opacity:0.55}));
+  blush.position.set(-0.12,0.08,0.24);blush.scale.set(1,1,0.4);g.add(blush);
+  return g;
+}
+
+// --- realistic tree: textured trunk + branches + layered foliage ---
+const leafColors=[0x2f7f2f,0x359435,0x287428,0x3fa33f];
+function buildTree(){
+  const g=new THREE.Group();
+  const trunkMat=new THREE.MeshStandardMaterial({map:barkTex,roughness:0.95});
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.34,0.58,4.4,12),trunkMat);trunk.position.y=2.2;trunk.castShadow=true;trunk.receiveShadow=true;g.add(trunk);
+  // roots
+  for(let k=0;k<4;k++){const a=k/4*Math.PI*2+0.4;const root=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.2,1.1,8),trunkMat);root.position.set(Math.cos(a)*0.6,0.35,Math.sin(a)*0.6);root.rotation.z=Math.cos(a)*0.5;root.rotation.x=-Math.sin(a)*0.5;root.castShadow=true;g.add(root);}
+  // branches reaching into the crown
+  const branchMat=trunkMat;
+  [[0.5,3.6,0.25,-0.5],[ -0.45,3.9,-0.2,0.45]].forEach(b=>{
+    const br=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.16,1.6,8),branchMat);
+    br.position.set(b[0],b[1],b[2]);br.rotation.z=b[3];br.castShadow=true;g.add(br);
+  });
+  // layered foliage blobs (irregular, natural crown)
+  const blobs=[
+    {x:0,y:5.2,z:0,r:2.2},
+    {x:1.1,y:4.4,z:0.5,r:1.4},
+    {x:-1.1,y:4.5,z:-0.4,r:1.45},
+    {x:0.2,y:6.4,z:-0.3,r:1.3},
+    {x:-0.3,y:4.2,z:0.9,r:1.2},
+  ];
+  const crownCenter=new THREE.Vector3(0,5.2,0);
+  blobs.forEach((b,i)=>{
+    const m=new THREE.Mesh(new THREE.SphereGeometry(b.r,24,24),new THREE.MeshStandardMaterial({color:leafColors[i%leafColors.length],roughness:0.9}));
+    m.position.set(b.x,b.y,b.z);m.scale.set(1,0.88,1);m.castShadow=true;m.receiveShadow=true;g.add(m);
+  });
+  g.userData.crownCenter=crownCenter;
+  g.userData.crownR=2.2;
+  return g;
+}
+
 const trees=[];
-for(let t=0;t<2;t++){const g=new THREE.Group();const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.5,4,10),new THREE.MeshStandardMaterial({color:0x5a3a22,roughness:0.95}));trunk.position.y=2;trunk.castShadow=true;g.add(trunk);const crown=new THREE.Mesh(new THREE.SphereGeometry(2,20,20),new THREE.MeshStandardMaterial({color:0x2f7f2f,roughness:0.9}));crown.position.y=4.8;crown.castShadow=true;g.add(crown);g.position.set(t?6:-6,0,0);scene.add(g);trees.push({group:g,apples:[]});}
-function addApples(tree,count){tree.apples.forEach(a=>a.visible=false);for(let i=0;i<count;i++){let a;if(tree.apples[i]){a=tree.apples[i];}else{a=new THREE.Mesh(new THREE.SphereGeometry(0.22,12,12),new THREE.MeshStandardMaterial({color:0xe83a3a,roughness:0.5}));a.castShadow=true;tree.group.add(a);tree.apples.push(a);}a.visible=true;a.position.set((Math.random()-0.5)*1.2,4+Math.random()*1.4,(Math.random()-0.5)*1.2);}}
+for(let t=0;t<2;t++){const g=buildTree();g.position.set(t?6:-6,0,0);scene.add(g);trees.push({group:g,apples:[]});}
+
+// Apple slots: points ON the crown surface, front hemisphere (+z toward camera),
+// spread so every apple is visible and countable — never buried inside leaves.
+const SLOT_DIRS=[
+  new THREE.Vector3(-0.55,0.25,0.80),
+  new THREE.Vector3(0.05,0.45,0.89),
+  new THREE.Vector3(0.60,0.20,0.78),
+  new THREE.Vector3(-0.30,-0.30,0.91),
+  new THREE.Vector3(0.38,-0.32,0.87),
+  new THREE.Vector3(0.0,0.75,0.66),
+].map(v=>v.normalize());
+function crownSlot(tree,slotIdx,jitter){
+  const c=tree.group.userData.crownCenter;
+  const R=tree.group.userData.crownR+0.30;
+  const d=SLOT_DIRS[slotIdx%SLOT_DIRS.length];
+  const j=jitter||0;
+  return new THREE.Vector3(
+    c.x+d.x*R+(Math.random()-0.5)*j,
+    c.y+d.y*R+(Math.random()-0.5)*j,
+    c.z+d.z*R+(Math.random()-0.5)*j
+  );
+}
+function addApples(tree,count){
+  // hide extras
+  for(let i=count;i<tree.apples.length;i++) tree.apples[i].visible=false;
+  for(let i=0;i<count;i++){
+    let a=tree.apples[i];
+    if(!a){a=makeApple();tree.group.add(a);tree.apples.push(a);}
+    a.visible=true;
+    a.position.copy(crownSlot(tree,i,0.08));
+    a.rotation.y=Math.random()*Math.PI*2;
+    a.userData.baseY=a.position.y;
+    a.userData.phase=Math.random()*Math.PI*2;
+  }
+}
+
+// --- forest dressing: background pines, bushes, flowers, clouds, butterflies ---
+(function(){
+  // distant pine ring for depth
+  const pineTrunk=new THREE.MeshStandardMaterial({color:0x5a3a22,roughness:0.95});
+  const pineLeaf=new THREE.MeshStandardMaterial({color:0x245f28,roughness:0.95});
+  for(let i=0;i<10;i++){
+    const a=(i/10)*Math.PI*2+0.3;
+    const R=20+Math.random()*4;
+    const p=new THREE.Group();
+    const tr=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.35,2.2,8),pineTrunk);tr.position.y=1.1;tr.castShadow=true;p.add(tr);
+    for(let k=0;k<3;k++){const cone=new THREE.Mesh(new THREE.ConeGeometry(2.0-k*0.45,2.0,10),pineLeaf);cone.position.y=2.6+k*1.25;cone.castShadow=true;p.add(cone);}
+    p.position.set(Math.cos(a)*R,0,Math.sin(a)*R-4);
+    const s=0.9+Math.random()*0.8;p.scale.setScalar(s);
+    scene.add(p);
+  }
+  // bushes
+  const bushMat=new THREE.MeshStandardMaterial({color:0x2f7f2f,roughness:0.95});
+  [[-10,3],[10,2.5],[0,-6],[-3,8],[4,8.5]].forEach(pt=>{
+    const b=new THREE.Mesh(new THREE.SphereGeometry(0.8+Math.random()*0.5,14,14),bushMat);
+    b.position.set(pt[0],0.5,pt[1]);b.scale.y=0.7;b.castShadow=true;scene.add(b);
+  });
+  // flowers: tiny stem + colored head
+  const flowerColors=[0xffd166,0xff8fcf,0xffffff,0xff6a6a];
+  for(let i=0;i<26;i++){
+    const f=new THREE.Group();
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.5,6),new THREE.MeshStandardMaterial({color:0x2f7f2f}));
+    stem.position.y=0.25;f.add(stem);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(0.11,10,10),new THREE.MeshStandardMaterial({color:flowerColors[i%flowerColors.length],roughness:0.6}));
+    head.position.y=0.55;head.castShadow=true;f.add(head);
+    const a=Math.random()*Math.PI*2,R=8+Math.random()*9;
+    f.position.set(Math.cos(a)*R,0,Math.sin(a)*R);
+    if(Math.abs(f.position.x)<8&&Math.abs(f.position.z)<6) f.position.x+=10;
+    scene.add(f);
+  }
+  // grass tufts
+  const tuftMat=new THREE.MeshStandardMaterial({color:0x4da33d,roughness:1});
+  for(let i=0;i<60;i++){
+    const tuft=new THREE.Mesh(new THREE.ConeGeometry(0.09,0.45,5),tuftMat);
+    const a=Math.random()*Math.PI*2,R=4+Math.random()*16;
+    tuft.position.set(Math.cos(a)*R,0.22,Math.sin(a)*R);
+    tuft.rotation.z=(Math.random()-0.5)*0.4;
+    scene.add(tuft);
+  }
+})();
+const clouds=[];
+(function(){for(let i=0;i<4;i++){const c=new THREE.Group();for(let k=0;k<5;k++){const p=new THREE.Mesh(new THREE.SphereGeometry(0.8+Math.random()*0.6,12,12),new THREE.MeshStandardMaterial({color:0xffffff,roughness:1}));p.position.set(k*0.9-1.8,(Math.random()-0.5)*0.4,(Math.random()-0.5)*0.5);p.scale.y=0.55;c.add(p);}c.position.set(-16+i*10,12,-16+Math.random()*4);scene.add(c);clouds.push(c);}})();
+const butterflies=[];
+(function(){
+  for(let i=0;i<2;i++){
+    const b=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.SphereGeometry(0.06,8,8),new THREE.MeshStandardMaterial({color:0x333333}));
+    b.add(body);
+    const wings=[];
+    for(const s of [1,-1]){const w=new THREE.Mesh(new THREE.PlaneGeometry(0.34,0.24),new THREE.MeshStandardMaterial({color:i?0x9fd0ff:0xffb347,side:THREE.DoubleSide,roughness:0.6}));w.position.x=s*0.2;w.rotation.y=Math.PI/2;b.add(w);wings.push(w);}
+    b.userData={wings,off:i*2.4};
+    b.position.set(i?4:-4,2.5,4);
+    scene.add(b);butterflies.push(b);
+  }
+})();
+
 // game logic
 const qEl=document.getElementById('q'),optsEl=document.getElementById('opts'),scoreEl=document.getElementById('score'),nextBtn=document.getElementById('nextBtn');
 let score=0;
 function newRound(){const a=1+Math.floor(Math.random()*5);const b=1+Math.floor(Math.random()*5);const ans=a+b;const ops=[ans-1,ans,ans+1,ans+2];const wrong=ops.filter(o=>o>0&&o!==ans);const choices=[ans,...wrong].sort(()=>Math.random()-0.5);qEl.textContent=`Count: ${a} apples on one tree and ${b} on the other. How many in total?`;addApples(trees[0],a);addApples(trees[1],b);optsEl.innerHTML='';choices.forEach(c=>{const btn=document.createElement('button');btn.className='opt';btn.textContent=c;btn.addEventListener('click',()=>{const bs=optsEl.querySelectorAll('.opt');bs.forEach(x=>x.disabled=true);if(c===ans){btn.classList.add('right');score++;scoreEl.textContent=`⭐ ${score}`;qEl.textContent='✅ Correct! Great counting!';}else{btn.classList.add('wrong');bs.forEach(x=>{if(+x.textContent===ans)x.classList.add('right');});qEl.textContent=`❌ The answer was ${ans}.`;}});optsEl.appendChild(btn);});}
 nextBtn.onclick=newRound;
 // labels so the child knows which tree is which
-trees.forEach((tr,i)=>{ const lbl=KidLib.makeLabel('Tree '+(i+1),{scale:1.2}); lbl.position.y=6.2; tr.group.add(lbl); });
+trees.forEach((tr,i)=>{ const lbl=KidLib.makeLabel('Tree '+(i+1),{scale:1.2}); lbl.position.y=8.2; tr.group.add(lbl); });
 KidLib.pulse(scene, trees[0].group.position);
 newRound();
-// --- render loop (this scene was previously rendering a single frame) ---
+// --- render loop ---
 const clock=new THREE.Clock();
 (function animate(){
   requestAnimationFrame(animate);
   const t=clock.getElapsedTime();
   trees.forEach((tr,i)=>{
-    tr.group.rotation.y=Math.sin(t*0.25+i)*0.08;
-    tr.apples.forEach(a=>{ if(a.visible && a.userData.baseY==null) a.userData.baseY=a.position.y; if(a.visible) a.position.y=a.userData.baseY+Math.sin(t*1.6+i)*0.08; });
+    tr.group.rotation.y=Math.sin(t*0.25+i)*0.05;
+    tr.apples.forEach(a=>{ if(a.visible) a.position.y=a.userData.baseY+Math.sin(t*1.6+a.userData.phase)*0.06; });
   });
+  clouds.forEach((c,i)=>{c.position.x=-16+((t*0.5+i*10)%34);});
+  butterflies.forEach((b,bi)=>{b.position.x=(bi?4:-4)+Math.sin(t*0.6+bi)*2;b.position.y=2.5+Math.sin(t*2+bi)*0.4;b.rotation.y=t*0.7+bi;b.userData.wings.forEach((w,wi)=>{w.rotation.z=Math.sin(t*16+bi)*0.5*(wi?1:-1);});});
   controls.update();
   if(window.KidLib)KidLib.updateLabels(scene,camera);
   fx.render(scene, camera);

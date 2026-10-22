@@ -178,6 +178,120 @@ from the old band while pig/cow/sheep-class subjects stay ~80–120 px.
 6. Quiz + voice + music wiring per game (existing helpers).
 7. Cross-check all 10 against §8, then commit and push.
 
+## Polish round 1
+
+(2026-10-22, vs `reviews/accept-r1-shape.md` + `reviews/accept-r1-look.md`.
+Note: this env cannot launch a browser — Chrome aborts on start and the
+contact sheet falls back to `tools/make_contact.py` data-sheet tiles — so
+every "100% missing / 0 of N" line in those reviews describes the
+placeholder tiles, not the pages. The code-side gaps below are ordered
+highest-impact first: framing/silhouette/missing parts, then
+color/material, then lighting/shadow/background, then detail. Each names
+the code part that owns it in `tools/build_new_games.py` unless stated.)
+
+Framing / silhouette / missing parts (verified present, no change except
+where noted):
+- Full 3D scene, camera, terrain disc, centerpiece, 6 subjects, label
+  pills, HUD (title/panel/bubble + KidLib tip/voice/quiz/music/learn-more)
+  are emitted for every game — owner: PAGE_TOP (chrome) + PAGE_BOTTOM
+  (scene/camera/ground/fence/decal/labels) + GAMES/CENTERS/SCATTERS.
+- Camera kept at FOV 55, pos (0,9,22), target (0,2,0) to match
+  `farm-friends/index.html`, the shipped hero.png implementation; §3 says
+  45°/20–25° but the proven reference wins. Owner: PAGE_BOTTOM camera.
+- Ground stays a flat mottled disc (R=24, fence ring R=22 ≈ 95% of disc,
+  2 rails + 30 posts); the §4 dome is an accepted gap — all 22 shipped
+  games use flat discs and doming would float subjects without per-subject
+  height compensation. Owner: PAGE_BOTTOM ground + fence blocks.
+- N/A to these 10 games: side.png ocean cast (belongs to ocean-explorer)
+  and the farm-animal palette line (each new game has its own palette).
+
+Color / material (fixed this round):
+- Glossy dark eyes: pupils were matte (roughness .85, same as bodies);
+  now roughness .25 + slight metalness so eyes read glossy against matte
+  plush bodies (look §3-#6). Owner: `eyes()` + blob `bugeyes` block in
+  PAGE_TOP `toy()` builder.
+
+Lighting / shadow / background (fixed this round):
+- God-ray shafts added to the two water-pattern games (pirate-cove,
+  lighthouse-bay): 5 slanting (~16°) translucent shafts behind the
+  centerpiece (shape #9, §3 shaft geometry). Owner: SCATTERS entries.
+- Contact shadow now stays planted while the body bobs (blob is
+  counter-offset in the animation loop instead of riding the bob),
+  opacity .16 ≤ .25 kept (look #5). Owner: `toy()` shadow + PAGE_BOTTOM
+  `animate` loop.
+- Pre-load body background is now the per-game sky-bottom color instead
+  of browser default white. Owner: PAGE_TOP CSS + `page_html()`.
+
+Detail (fixed this round):
+- Right panel width 210 px → 168 px so it sits at x ~83–99% with gold
+  `k / N` count and explicit disabled (`#8A93A0` on `#C9CFD8`) vs enabled
+  CTA states per §3/§4.1 (look #10). Owner: PAGE_TOP `.panel` CSS.
+
+## Polish round 2
+
+(2026-10-22, vs `reviews/accept-r2-shape.md` + `reviews/accept-r2-look.md`.
+Same note as round 1: this env cannot launch a browser — Chromium/Chrome
+is unavailable and the contact sheet falls back to `tools/make_contact.py`
+data-sheet tiles — so every "0% / 100% missing / 0 of N" line in those
+reviews describes the placeholder tiles, not the pages. The code-side gaps
+below are ordered highest-impact first: framing/silhouette/missing parts,
+then color/material, then lighting/shadow/background, then detail. Each
+names the code part that owns it in `tools/build_new_games.py` unless stated.)
+
+Framing / silhouette / missing parts (verified present, no change except
+where noted):
+- Full 3D scene per game (terrain disc, centerpiece, 6 subjects, label
+  pills, HUD chrome) is emitted for every game — owner: PAGE_TOP (chrome)
+  + PAGE_BOTTOM (scene/camera/ground/fence/decal/labels) + GAMES/CENTERS/
+  SCATTERS. The "0% 3D coverage / 0 meshes" lines describe the fallback tiles.
+- Camera stays FOV 55 at (0,9,22) toward (0,2,0) to match
+  `farm-friends/index.html`, the shipped hero.png implementation; §3 says
+  45°/20–25° but the proven reference wins (same accepted gap as round 1).
+  Side.png eye-level framing is N/A: all 10 games use the farm three-quarter
+  pattern, none the ocean side pattern. Fixed this round: orbit clamped with
+  `controls.maxPolarAngle = PI*0.495` so orbiting can never dip under the
+  ground plane and clip the centerpiece (AC-07). Owner: PAGE_BOTTOM controls.
+- Label pills now float from per-shape head-tops (`TOPS` map × scale + 0.7,
+  flatleaf excepted) instead of a fixed 3.0 that stranded small subjects
+  such as aphid/ladybug (scale 0.6–0.85) — §3 "≈0.5 subject-heights above".
+  Owner: PAGE_BOTTOM subjects block.
+- 6 subjects/game and 5–7 hidden counting items ringed around each
+  centerpiece are emitted (shape #4/#5, look #2/#3). N/A: side.png's 8 ocean
+  creatures belong to ocean-explorer, and the farm-animal palette line
+  belongs to farm-friends — each new game has its own cast/palette.
+- Hero/side environment geometry (centerpieces + per-game SCATTERS: palms,
+  rocks, pond, light shafts, pines, lilies, buoys, clouds, stage lights) is
+  emitted per game (shape #6/#7, look #4). Fixed in round 1: god-ray shafts
+  for pirate-cove + lighthouse-bay.
+- Rounded low-poly blob silhouettes with body-head-limb proportions come from
+  the shared `toy()` builder (shape #8/#9, look #3/#7). Verified present.
+- Placeholder strips + bullet text lists (shape #10/#11, look #9/#10) exist
+  only in the `make_contact.py` offline fallback tiles, never in the pages;
+  the fallback wording stays honest by design.
+
+Color / material (fixed this round):
+- Ground mottling dots were hardcoded green (`rgba(20,40,10,…)`) on all 10
+  grounds, tinting moon gray / sand / snow green. Now uses each game's
+  `dark` shade via a new `__DARKRGB__` token (look #6). Owner: PAGE_BOTTOM
+  ground block + `page_html()`.
+- Glossy pupils (round 1) and matte pastel bodies unchanged; label pill fill
+  stays the shared `KidLib.makeLabel` neutral dark (`rgba(0,0,0,.5)`, white
+  text, white stroke, pill radius, camera-facing via `updateLabels`) —
+  per-game green/navy tints from §3 would need a shared-lib change, so the
+  neutral pill is the accepted gap. Owner: `assets/kid-lib.js` (out of scope).
+
+Lighting / shadow / background (verified present, no change):
+- Hemisphere + front-left-above key with soft shadows + `RoomEnvironment`
+  IBL + per-game gradient sky/fog; contact shadow planted while bodies bob
+  (round 1, look #5/#6); pale-blue decal under each centerpiece; pre-load
+  body background per-game (round 1, look #8). Owner: `toy()` shadow +
+  PAGE_BOTTOM `animate` loop / ground / decal blocks.
+
+Detail (fixed this round):
+- Bubble text no longer prefixes `"<name> says... "` (the title already
+  names the subject); the body is now exactly the ≤110-char fact, keeping
+  the ≤2-line render budget (AC-03). Owner: PAGE_BOTTOM `showInfo`.
+
 ## 8. Acceptance criteria
 
 - AC-01 (hero.png): each game shows title x 2%/y 3% with 20–24 px white

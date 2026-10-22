@@ -1,6 +1,6 @@
 # 3D Learning Simulators (for age 7)
 
-Twenty-one browser-based 3D learning apps for a 7-year-old. Each is a single HTML file — open in any modern browser (Chrome/Edge/Safari). No install, no build.
+Thirty-one browser-based 3D learning apps for a 7-year-old. Each is a single HTML file — open in any modern browser (Chrome/Edge/Safari). No install, no build.
 
 ## Play online
 
@@ -130,3 +130,19 @@ simulator_game/
 ```
 
 > Note: apps need internet on first load to fetch Three.js. Offline version = save Three.js files locally (ask if you want that).
+
+<!-- NEW-WORLDS-START -->
+### ✨ New Worlds
+| Folder | Topic | What the kid learns |
+|---|---|---|
+| `desert-oasis` | Desert Oasis | Hot sand, cool oasis water, and animals that love the heat. |
+| `pirate-cove` | Pirate Cove | Sail in, meet the crew, and hunt for hidden gold coins. |
+| `moon-base` | Moon Base | Bounce on the Moon, meet aliens, and count the star flags. |
+| `rainbow-lab` | Rainbow Lab | Mix fizzy potions and count the bubbles in the big flask. |
+| `castle-quest` | Castle Quest | Knights, dragons, and a tall stone keep to explore. |
+| `frog-pond` | Frog Pond | Croak with frogs and count the tadpoles in the pond. |
+| `lighthouse-bay` | Lighthouse Bay | Flash the lighthouse beam and count the bobbing buoys. |
+| `ant-city` | Ant City | March with the colony and count the crumbs in the hill. |
+| `balloon-sky` | Balloon Sky | Float past clouds and count the little balloons aloft. |
+| `feelings-stage` | Feelings Stage | Meet the feelings on stage and count the hearts. |
+<!-- NEW-WORLDS-END -->

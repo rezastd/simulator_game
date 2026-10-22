@@ -1,0 +1,21 @@
+# PRD review vs refs (independent, read 2026-10-22)
+
+- Wooden post-and-2-rail fence ring at the field horizon in hero.png (8+ posts, full width) is absent from every spec table -> add fence row to §4.1: wood `#C89B6A`, posts ~8 px wide × ~45 px tall at 1000×700, 2 rails, ring radius ~95% of ground disc.
+- Light-blue ellipse puddle/disc under the barn (x ~46–58%, y ~38–42%) is not specified -> add pale-blue ground decal `#BFD3E2` ellipse ~115×25 px under each centerpiece, or state barn sits directly on grass.
+- Horse label floats over the barn with no visible horse (fully occluded at load) -> add occlusion rule: every subject's body must be ≥80% visible at load, min angular separation from centerpiece.
+- Duck subject (~15–20 px tall) violates the 0.7–1.1 H subject-size rule (pig/cow/sheep ~80–120 px) -> exempt juvenile/counted targets from the size band or widen it to 0.15–1.2 H with pixel minima.
+- Label pills carry a 2 px light (white/pale-green) border stroke outside the dark fill -> add stroke spec (2 px `rgba(255,255,255,.85)`, radius 999 px) to §3/§4.1 pill rows.
+- Ocean modal has three controls (Read aloud + Learn more + X) but §4.1/§5 specify only name + fact + Read-aloud + close -> add Learn-more pill (dark, brain icon, opens existing helper) with position and size.
+- Starfish modal fact renders on 2 lines, contradicting the §4/§5 "1-line fact, ≤90 chars" rule -> change fact rule to ≤2 lines / ≤110 chars and reword AC-03.
+- Ocean scatter is unspecified (6–8 pink/white/purple pebbles ~20–40 px, ~10 green seaweed blades ~100–150 px tall, 1 pink coral sprig, 2 purple reef domes, white plankton dots) -> add backdrop-scatter row with counts, sizes, colors per game.
+- Light shafts have color only, no geometry (4–5 shafts slanting ~15–20° off vertical, widths ~60–120 px, full-height) -> add shaft count/angle/width/opacity numbers to §3.
+- World-unit numbers (H = 1.0, R = 14 H, centerpiece 2.2 H, ring 5–9 H) have no pixel mapping at default camera -> add measured equivalents at 1000×700 (barn ~90×70 px ≈ 9%×10% of frame; pig ~100 px tall foreground) and require renders to match within 20%.
+- Edge treatment is never stated (refs show smooth shaded toys with no outlines) -> add explicit no-outline/no-toon rule for subjects and centerpieces.
+- White sheep/cow clip to near-pure-white (bloom/overexposure) while PRD only promises soft shadows -> add exposure rule: lit whites must keep detail (no channel above ~245) / disable bloom.
+- AC-04 promises a contact shadow under every subject, but shadows in hero.png are faint to absent -> specify shadow as soft ellipse, opacity ≤0.25, radius ~60% of body width, or drop the per-subject requirement.
+- Hero field is a dome with a visibly curved horizon bulge, not the flat disc §4 implies -> specify dome lift (horizon center ~y 30% vs ~y 36% at edges at default camera).
+- Chips contradiction: all 10 new games have exactly 6 subjects, so the ≤8-chip ocean-pattern row (§4.1) and the ">6 tappables" HUD rule (§5) never trigger -> state which new games (if any) use bottom chips vs floating pills only.
+- Frame-size mismatch: §3/§4.1 fractions assume 1024×640 (8:5) but refs are 1000×700 (10:7) -> re-measure all x/y fractions on the true default canvas or lock the canvas to the refs' 10:7 aspect.
+- Title blocks include a leading icon (house in hero, swimmer in side) that §4.1 omits -> add 20–24 px white icon before each title.
+- CTA state ambiguous: §5 cites hero.png's cream "Count them!" as the disabled pre-reveal state, but it renders identical to an enabled button -> define disabled vs enabled CTA colors explicitly (e.g. disabled `#8A93A0` text on `#C9CFD8`; enabled dark text on cream).
+- Criteria not checkable in a render (move to manual/QA list, not §8): speechSynthesis voice output, Quiz 3-question content, 60 fps / ≤40 draw calls, `git push` and exact-commit-contents (AC-10), "instantly recognizable family" (AC-final), undefined "daylight rendering tolerance" (AC-06), per-subject WebAudio frequencies.

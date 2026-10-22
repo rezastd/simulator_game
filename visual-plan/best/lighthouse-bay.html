@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lighthouse Bay — 3D Simulator</title>
+<link rel="icon" href="../favicon.ico" />
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif; overflow:hidden; color:#fff; }
+  #app { position:fixed; inset:0; }
+  .hud { position:fixed; top:0; left:0; right:0; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:10; }
+  .title { font-size:1.4rem; font-weight:700; text-shadow:0 2px 6px rgba(0,0,0,.45); }
+  .sub { font-size:.85rem; color:#eaffd6; margin-bottom:8px; }
+  .back { pointer-events:auto; display:inline-block; text-decoration:none; color:#fff; background:rgba(0,0,0,.28); border:2px solid rgba(255,255,255,.4); padding:8px 14px; border-radius:999px; font-size:.9rem; }
+  .back:hover { background:rgba(0,0,0,.45); }
+  .panel { position:fixed; right:16px; top:70px; background:rgba(0,0,0,.4); border:2px solid rgba(255,255,255,.3); border-radius:18px; padding:14px 16px; z-index:15; width:210px; }
+  .panel h3 { font-size:1rem; margin-bottom:8px; }
+  .panel .egg-count { font-size:1.6rem; font-weight:700; color:#ffe08a; }
+  .panel .prompt { font-size:.85rem; color:#eaffd6; margin-top:6px; line-height:1.4; }
+  .panel .ok { margin-top:10px; width:100%; background:#ffe08a; color:#3a2b00; border:none; border-radius:999px; padding:10px; font-size:1rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .panel .ok:disabled { background:#C9CFD8; color:#8A93A0; opacity:1; cursor:default; }
+  .bubble { position:fixed; left:50%; bottom:210px; transform:translateX(-50%); background:rgba(35,55,18,.96); border:3px solid rgba(255,255,255,.35); border-radius:24px; padding:16px 22px; max-width:min(90vw,400px); text-align:center; z-index:20; box-shadow:0 10px 34px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity .3s; }
+  .bubble.show { opacity:1; pointer-events:auto; }
+  .bubble h3 { font-size:1.25rem; margin-bottom:4px; }
+  .bubble p { font-size:1rem; line-height:1.45; }
+  .bubble .sound { margin-top:8px; background:#eaffd6; color:#2a4a10; border:none; border-radius:999px; padding:9px 16px; font-size:.95rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .bubble .close { margin-left:8px; background:rgba(255,255,255,.2); color:#fff; border:none; border-radius:999px; padding:9px 14px; font-size:.95rem; cursor:pointer; font-family:inherit; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21 11 8h2l2 13M10 8V5h4v3M8 5h8M7 21h10"/><circle cx="12" cy="11" r="1.4"/></svg>Lighthouse Bay<div class="sub">Tap the bay friends · then count the buoys by the lighthouse</div></div>
+  <a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a></div>
+</div>
+<div class="panel">
+  <h3>🗼 Buoy Counting Game</h3>
+  <div class="egg-count" id="eggCount">0 / 0</div>
+  <div class="prompt" id="prompt">Click the lighthouse to find the hidden buoys!</div>
+  <button class="ok" id="checkBtn" disabled>Count them!</button>
+</div>
+<div class="bubble" id="bubble">
+  <h3 id="bTitle"></h3><p id="bText"></p>
+  <div><button class="sound" id="bRead">🔊 Play sound</button><button class="close" id="bClose">✕</button></div>
+</div>
+
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script type="importmap">
+{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+<script src="../assets/kid-lib.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+
+const SUBJECTS = [{name:"Sailor",shape:"human",c1:0x2b4a6a,fact:"Sailors read maps of the sea called charts to find their way.",freq:230,c2:0xf0f2f5,skin:0xf2c89b,extra:"sailor"},{name:"Sailboat",shape:"prop",c1:0xf0f2f5,fact:"Sailboats catch the wind in big cloth sails to glide along.",freq:280,c2:0xd84040,scale:1.1,ptype:"boat"},{name:"Seagull",shape:"bird",c1:0xf0f2f5,fact:"Seagulls ride warm air going up without flapping.",freq:580,c2:0x3a3f48,scale:0.9},{name:"Crab",shape:"bug",c1:0xe06040,fact:"Crabs hide under rocks when big waves come in.",freq:300,c2:0x8a2010,scale:0.85},{name:"Fish",shape:"fish",c1:0xffb347,fact:"Bay fish swim in glittery groups called schools.",freq:500,c2:0x3a6fd0,scale:0.9},{name:"Buoy",shape:"prop",c1:0xe04040,fact:"Buoys float and bob to mark safe paths for boats.",freq:350,c2:0xf0f2f5,scale:1.0,ptype:"buoy"}];
+
+// WebAudio blips, one pitch per subject
+const actx = (()=>{ try{ return new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } })();
+function blip(freq, dur){
+  if(!actx) return; if(actx.state==='suspended') actx.resume();
+  const t0=actx.currentTime, osc=actx.createOscillator(), g=actx.createGain();
+  osc.connect(g); g.connect(actx.destination); g.gain.setValueAtTime(0.001,t0);
+  g.gain.exponentialRampToValueAtTime(0.4,t0+0.03); g.gain.exponentialRampToValueAtTime(0.001,t0+(dur||0.5));
+  osc.type='square'; osc.frequency.setValueAtTime(freq||440,t0);
+  osc.start(t0); osc.stop(t0+(dur||0.5)+0.05);
+}
+
+function mat(c){ return new THREE.MeshStandardMaterial({ color:c, roughness:0.85 }); }
+const GEO = {
+  sph:new THREE.SphereGeometry(1,20,16), box:new THREE.BoxGeometry(1,1,1),
+  cyl:new THREE.CylinderGeometry(1,1,1,14), cone:new THREE.ConeGeometry(1,1,14),
+  tor:new THREE.TorusGeometry(1,0.12,10,28), arc:new THREE.TorusGeometry(1,0.09,8,20,Math.PI),
+  oct:new THREE.OctahedronGeometry(1)
+};
+function M(parent,geo,c,x,y,z,sx,sy,sz,o){
+  const m=new THREE.Mesh(geo, mat(c));
+  m.position.set(x,y,z);
+  m.scale.set(sx===undefined?1:sx, sy===undefined?1:sy, sz===undefined?1:sz);
+  o=o||{};
+  if(o.rx) m.rotation.x=o.rx; if(o.ry) m.rotation.y=o.ry; if(o.rz) m.rotation.z=o.rz;
+  if(o.emissive){ m.material.emissive=new THREE.Color(o.emissive); m.material.emissiveIntensity=(o.ei===undefined?0.6:o.ei); }
+  if(o.opacity!==undefined){ m.material.transparent=true; m.material.opacity=o.opacity; }
+  if(o.rough!==undefined) m.material.roughness=o.rough;
+  if(o.metal!==undefined) m.material.metalness=o.metal;
+  m.castShadow=(o.shadow!==false); m.receiveShadow=!!o.recv;
+  parent.add(m); return m;
+}
+function eyes(g,x,y,z,s){
+  s=s||1;
+  const w=mat(0xFFFFFF), p=mat(0x1A1A22);
+  for(const sd of [-1,1]){
+    const e=new THREE.Mesh(GEO.sph,w); e.position.set(x+sd*0.16*s,y,z); e.scale.set(0.11*s,0.13*s,0.08*s); g.add(e);
+    const u=new THREE.Mesh(GEO.sph,p); u.position.set(x+sd*0.16*s,y-0.01*s,z+0.06*s); u.scale.set(0.05*s,0.06*s,0.04*s); g.add(u);
+  }
+}
+function earPair(b,c,x,y,z,kind){
+  for(const sd of [-1,1]){
+    if(kind==='pointy') M(b,GEO.cone,c, x+sd*0.2,y,z, .12,.12,.35);
+    else M(b,GEO.sph,c, x+sd*0.22,y,z, .12,.12,.12);
+  }
+}
+function wingPair(b,c,x,y,z,s){
+  for(const sd of [-1,1]) M(b,GEO.box,c, x+sd*0.85*s,y,z, .95*s,.08*s,.6*s,{rz:sd*0.35});
+}
+function mouth(b,mood){
+  const mc=0x4A2A22;
+  if(mood==='happy') M(b,GEO.arc,mc, 0,0.95,0.68, .28,.28,.28,{rz:Math.PI});
+  else if(mood==='sad') M(b,GEO.arc,mc, 0,0.75,0.68, .26,.26,.26,{});
+  else if(mood==='angry'){ M(b,GEO.arc,mc, 0,0.72,0.68, .26,.26,.26,{}); M(b,GEO.box,mc, -0.25,1.5,0.6, .3,.07,.06,{rz:-0.4}); M(b,GEO.box,mc, 0.25,1.5,0.6, .3,.07,.06,{rz:0.4}); }
+  else if(mood==='scared'){ M(b,GEO.tor,mc, 0,0.8,0.68, .12,.12,.12); }
+  else if(mood==='ooh'){ M(b,GEO.tor,mc, 0,0.8,0.68, .17,.2,.12); M(b,GEO.box,mc, -0.25,1.55,0.6, .3,.07,.06,{rz:0.25}); M(b,GEO.box,mc, 0.25,1.55,0.6, .3,.07,.06,{rz:-0.25}); }
+  else M(b,GEO.arc,mc, 0,0.92,0.68, .18,.18,.18,{rz:Math.PI});
+  for(const sd of [-1,1]) M(b,GEO.sph,0xFF9FB0, sd*0.42,0.95,0.55, .1,.08,.06,{shadow:false});
+}
+function prop(b,s){
+  const c1=s.c1, c2=(s.c2===undefined?s.c1:s.c2), k=s.ptype||'chest';
+  if(k==='chest'){
+    M(b,GEO.box,c1, 0,0.4,0, 1.2,.8,.8);
+    M(b,GEO.cyl,c1, 0,0.8,0, .4,.4,1.2,{rz:Math.PI/2});
+    M(b,GEO.box,0xFFD166, -0.4,0.45,0, .12,.9,.9); M(b,GEO.box,0xFFD166, 0.4,0.45,0, .12,.9,.9);
+    M(b,GEO.box,0xFFD166, 0,0.45,0.42, .25,.3,.06);
+    eyes(b,0,0.45,0.45,0.8);
+  } else if(k==='vehicle'){
+    M(b,GEO.box,c1, 0,0.65,0, 1.4,.5,.9);
+    M(b,GEO.box,c2, -0.2,1.1,0, .7,.4,.7);
+    M(b,GEO.box,0x5FE8F0, 0.18,1.1,0, .3,.28,.72,{emissive:0x5FE8F0,ei:.4});
+    for(const wx of [-0.5,0.5]) for(const wz of [-0.5,0.5]) M(b,GEO.cyl,0x2B2B33, wx,0.3,wz, .3,.3,.2,{rx:Math.PI/2});
+    M(b,GEO.cyl,c1, 0.5,1.5,0, .04,.04,.7); M(b,GEO.sph,0xFF5A5A, 0.5,1.9,0, .09,.09,.09,{emissive:0xFF5A5A,ei:.8});
+    eyes(b,-0.2,0.65,0.48,0.8);
+  } else if(k==='satellite'){
+    M(b,GEO.box,c1, 0,1.2,0, .7,.7,.7);
+    M(b,GEO.box,c2, -0.95,1.2,0, 1.1,.5,.08); M(b,GEO.box,c2, 0.95,1.2,0, 1.1,.5,.08);
+    M(b,GEO.cone,c1, 0,0.6,0, .3,.3,.4,{rx:Math.PI});
+    M(b,GEO.sph,0x5FE8F0, 0,1.35,0.36, .12,.12,.12,{emissive:0x5FE8F0,ei:.8});
+    M(b,GEO.cyl,c1, 0,0.25,0, .12,.12,.5);
+  } else if(k==='boat'){
+    M(b,GEO.box,0x6A452A, 0,0.5,0, 1.5,.7,2.6);
+    M(b,GEO.box,c1, 0,0.9,0, 1.7,.15,2.8);
+    M(b,GEO.cyl,0x5A3A22, 0,2.0,0, .09,.09,2.8);
+    M(b,GEO.box,c1, 0,2.2,0.75, 1.4,1.4,.1);
+    M(b,GEO.box,c2, 0,3.2,0, .7,.45,.08);
+    eyes(b,0,0.5,1.32,0.9);
+  } else if(k==='buoy'){
+    M(b,GEO.sph,c1, 0,0.55,0, .5,.55,.5);
+    M(b,GEO.cyl,c2, 0,0.65,0, .51,.51,.18);
+    M(b,GEO.cone,c1, 0,1.25,0, .2,.2,.4);
+    M(b,GEO.sph,0xFFD166, 0,1.5,0, .1,.1,.1,{emissive:0xFFD166,ei:.7});
+    eyes(b,0,0.35,0.45,0.9);
+  } else if(k==='arch'){
+    M(b,GEO.tor,c1, 0,0.9,0, 1.0,1.0,1.0);
+    M(b,GEO.sph,0x2A1808, 0,0.6,0, .65,.6,.3);
+    M(b,GEO.sph,c2, -0.9,0.15,0.3, .3,.2,.3); M(b,GEO.sph,c2, 0.9,0.15,-0.2, .25,.18,.25);
+  } else if(k==='kite'){
+    M(b,GEO.oct,c1, 0,1.6,0, .7,.9,.16);
+    M(b,GEO.oct,c2, 0,1.6,0.05, .35,.45,.16);
+    M(b,GEO.cyl,0xFFFFFF, 0,0.7,0, .02,.02,1.4);
+    for(let i=0;i<3;i++) M(b,GEO.box,c2, (i%2?0.12:-0.12),0.35+i*0.35,0, .18,.12,.04,{rz:(i%2?0.5:-0.5)});
+    eyes(b,0,1.75,0.14,0.8);
+  } else if(k==='plane'){
+    M(b,GEO.sph,c1, 0,1.0,0, .42,.42,1.1);
+    M(b,GEO.box,c2, 0,1.05,0.1, 2.3,.12,.55);
+    M(b,GEO.box,c2, 0,1.35,-0.95, .12,.5,.4);
+    M(b,GEO.sph,0x5FE8F0, 0,1.35,0.35, .22,.2,.25,{emissive:0x5FE8F0,ei:.4});
+    M(b,GEO.box,0x2B2B33, 0,1.0,1.15, .5,.4,.12);
+    eyes(b,0,1.05,0.95,0.7);
+  } else if(k==='flask'){
+    M(b,GEO.sph,c1, 0,0.62,0, .62,.62,.62,{opacity:.9});
+    M(b,GEO.sph,c2, 0,0.45,0, .45,.35,.45,{emissive:c2,ei:.3});
+    M(b,GEO.cyl,c1, 0,1.35,0, .2,.2,.7);
+    eyes(b,0,0.65,0.5,0.8);
+  } else if(k==='tube'){
+    M(b,GEO.cyl,c1, 0,0.75,0, .26,.26,1.2,{opacity:.9});
+    M(b,GEO.cyl,c2, 0,0.45,0, .2,.2,.6,{emissive:c2,ei:.3});
+    M(b,GEO.cyl,0x8A5A9A, 0,1.4,0, .28,.28,.15);
+    eyes(b,0,0.9,0.22,0.7);
+  } else if(k==='magnet'){
+    M(b,GEO.cyl,c1, -0.3,0.8,0, .2,.2,1.1); M(b,GEO.cyl,c1, 0.3,0.8,0, .2,.2,1.1);
+    M(b,GEO.box,c1, 0,1.35,0, .8,.35,.4);
+    M(b,GEO.cyl,0xF0F2F5, -0.3,0.3,0, .21,.21,.25); M(b,GEO.cyl,0xF0F2F5, 0.3,0.3,0, .21,.21,.25);
+    eyes(b,0,1.35,0.22,0.7);
+  } else if(k==='arm'){
+    M(b,GEO.cyl,c2, 0,0.2,0, .45,.45,.4);
+    M(b,GEO.box,c1, 0,0.8,0, .3,.9,.3,{rz:0.3});
+    M(b,GEO.sph,c2, 0,1.25,0.15, .18,.18,.18);
+    M(b,GEO.box,c1, 0.25,1.6,0.3, .22,.7,.22,{rz:-0.5});
+    M(b,GEO.box,c2, 0.5,1.85,0.45, .12,.3,.12,{rz:-0.5}); M(b,GEO.box,c2, 0.62,1.8,0.45, .12,.3,.12,{rz:-0.5});
+    M(b,GEO.sph,0x5FE8F0, 0,1.25,0.33, .08,.08,.08,{emissive:0x5FE8F0,ei:.8});
+  } else if(k==='crystal'){
+    M(b,GEO.sph,0x8A8F98, 0,0.15,0, .6,.25,.6);
+    M(b,GEO.oct,c1, 0,0.8,0, .5,.8,.5,{emissive:c2,ei:.25});
+    M(b,GEO.oct,c2, 0.45,0.45,0.2, .25,.4,.25);
+    eyes(b,0,0.7,0.42,0.7);
+  } else if(k==='banner'){
+    M(b,GEO.cyl,0x5A3A22, 0,1.1,0, .09,.09,2.4);
+    M(b,GEO.box,c1, 0.45,1.9,0, .85,.7,.06);
+    M(b,GEO.box,c2, 0.45,1.9,0.02, .35,.3,.06);
+    M(b,GEO.sph,0xFFD166, 0,2.4,0, .14,.14,.14);
+    M(b,GEO.cyl,0x8A8F98, 0,0.1,0, .35,.35,.2);
+  } else if(k==='torch'){
+    M(b,GEO.cyl,c1, 0,0.7,0, .1,.1,1.4,{rz:0.08});
+    M(b,GEO.cyl,0x3A2418, -0.05,1.35,0, .16,.16,.2);
+    M(b,GEO.cone,0xFF7A2A, -0.05,1.75,0, .22,.22,.5,{emissive:0xFF7A2A,ei:.9});
+    M(b,GEO.cone,0xFFD94A, -0.05,1.68,0, .12,.12,.3,{emissive:0xFFD94A,ei:1});
+  } else if(k==='catapult'){
+    M(b,GEO.box,c1, 0,0.55,0, 1.4,.25,.7);
+    for(const wx of [-0.5,0.5]) for(const wz of [-0.25,0.25]) M(b,GEO.cyl,c2, wx,0.28,wz, .28,.28,.15,{rx:Math.PI/2});
+    M(b,GEO.cyl,c1, 0,1.0,-0.1, .09,.09,1.6,{rx:0.7});
+    M(b,GEO.sph,0x3A3F48, 0,1.65,-0.62, .3,.2,.3);
+    eyes(b,0,0.55,0.37,0.8);
+  } else {
+    M(b,GEO.box,c1, 0,0.5,0, 1.0,.9,.9);
+    eyes(b,0,0.6,0.48,0.8);
+  }
+}
+function toy(s){
+  const g=new THREE.Group(), b=new THREE.Group(); g.add(b);
+  const c1=s.c1, c2=(s.c2===undefined?s.c1:s.c2), skin=s.skin||0xF2C89B;
+  const ex=s.extra||'', sh=s.shape||'blob';
+  if(sh==='quad'){
+    M(b,GEO.sph,c1, 0,0.75,0, .72,.72,1.05);
+    M(b,GEO.sph,c1, 0,1.15,0.95, .36,.36,.36);
+    M(b,GEO.sph,c2, 0,1.05,1.28, .18,.16,.18);
+    eyes(b,0,1.25,1.24,1);
+    for(const lx of [-0.35,0.35]) for(const lz of [-0.5,0.5]) M(b,GEO.cyl,c2, lx,0.3,lz, .1,.1,0.6);
+    M(b,GEO.cone,c2, 0,0.9,-1.05, .12,.12,.5,{rx:-Math.PI/2});
+    if(ex==='hump') M(b,GEO.sph,c1, 0,1.35,-0.1, .4,.42,.5);
+    if(ex==='mane'){ for(let i=0;i<4;i++) M(b,GEO.cone,0x3A2418, 0,1.5-i*0.18,-0.3+i*0.26, .12,.12,.28,{rx:-0.5}); }
+    else if(ex==='pointy') earPair(b,c1,0,1.5,0.85,'pointy');
+    else earPair(b,c1,0,1.48,0.9,'round');
+    if(ex==='wings') wingPair(b,c2,0,1.0,-0.3,1.1);
+  } else if(sh==='bird'){
+    M(b,GEO.sph,c1, 0,0.8,0, .62,.7,.62);
+    M(b,GEO.sph,c1, 0,1.5,0.1, .34,.34,.34);
+    M(b,GEO.cone,c2, 0,1.45,0.5, .12,.12,.3,{rx:Math.PI/2});
+    eyes(b,0,1.6,0.38,0.9);
+    M(b,GEO.box,c2, -0.62,0.85,0, .18,.5,.7); M(b,GEO.box,c2, 0.62,0.85,0, .18,.5,.7);
+    M(b,GEO.box,c2, 0,0.85,-0.65, .3,.12,.4);
+    M(b,GEO.cyl,c2, -0.15,0.15,0, .05,.05,.3); M(b,GEO.cyl,c2, 0.15,0.15,0, .05,.05,.3);
+  } else if(sh==='human'){
+    M(b,GEO.cyl,0x3A3F48, -0.16,0.3,0, .11,.11,0.6); M(b,GEO.cyl,0x3A3F48, 0.16,0.3,0, .11,.11,0.6);
+    M(b,GEO.cyl,c1, 0,0.95,0, .34,.34,0.8);
+    M(b,GEO.cyl,c1, -0.44,0.95,0, .09,.09,0.6,{rz:0.25}); M(b,GEO.cyl,c1, 0.44,0.95,0, .09,.09,0.6,{rz:-0.25});
+    M(b,GEO.sph,skin, -0.52,0.68,0, .1,.1,.1); M(b,GEO.sph,skin, 0.52,0.68,0, .1,.1,.1);
+    M(b,GEO.sph,skin, 0,1.7,0, .34,.36,.34);
+    eyes(b,0,1.72,0.3,1);
+    if(ex==='pirate'){ M(b,GEO.cyl,0x2B2B33, 0,2.0,0, .44,.44,0.16); M(b,GEO.box,0x2B2B33, 0,2.0,0, .9,.16,.3); }
+    else if(ex==='helmet') M(b,GEO.sph,c2, 0,1.78,0, .42,.36,.42,{opacity:.55});
+    else if(ex==='sailor') M(b,GEO.cyl,0xF0F2F5, 0,2.02,0, .27,.27,0.12);
+    else if(ex==='cap'){ M(b,GEO.cyl,c2, 0,2.0,0, .3,.3,0.14); M(b,GEO.box,c2, 0,1.95,0.4, .34,.08,.3); }
+    else if(ex==='goggles'){ for(const sd of [-1,1]) M(b,GEO.tor,0x3A3F48, sd*0.14,1.76,0.28, .11,.11,.11); }
+    else if(ex==='antennae'){ for(const sd of [-1,1]){ M(b,GEO.cyl,c2, sd*0.15,2.1,0, .03,.03,.4,{rz:-sd*0.3}); M(b,GEO.sph,0xFF5A5A, sd*0.22,2.3,0, .06,.06,.06,{emissive:0xFF5A5A,ei:.8}); } }
+  } else if(sh==='fish'){
+    M(b,GEO.sph,c1, 0,0.9,0, .5,.55,.85);
+    M(b,GEO.cone,c2, 0,0.9,-0.95, .35,.5,.35,{rx:-Math.PI/2});
+    M(b,GEO.cone,c2, 0,1.45,-0.1, .18,.18,.35);
+    eyes(b,0,1.0,0.72,0.9);
+  } else if(sh==='face'){
+    M(b,GEO.sph,c1, 0,1.0,0, .8,.85,.75);
+    eyes(b,0,1.2,0.62,1.1);
+    mouth(b,s.mood||'happy');
+    M(b,GEO.cyl,c1, -0.85,0.5,0, .1,.1,.6,{rz:0.3}); M(b,GEO.cyl,c1, 0.85,0.5,0, .1,.1,.6,{rz:-0.3});
+  } else if(sh==='bug'){
+    M(b,GEO.sph,c1, 0,0.45,0, .55,.45,.8);
+    M(b,GEO.sph,c1, 0,0.55,0.75, .3,.3,.3);
+    eyes(b,0,0.65,1.0,0.8);
+    for(const sd of [-1,1]) for(const lz of [-0.4,0,0.4]) M(b,GEO.cyl,c2, sd*0.62,0.25,lz, .05,.05,.5,{rz:sd*0.9});
+    for(const sd of [-1,1]){ M(b,GEO.cyl,c2, sd*0.12,0.9,0.85, .03,.03,.35,{rx:0.5}); M(b,GEO.sph,c2, sd*0.12,1.05,1.0, .05,.05,.05); }
+    if(ex==='spots'){ M(b,GEO.sph,0x111111, -0.25,0.82,-0.2, .12,.1,.12); M(b,GEO.sph,0x111111, 0.25,0.82,-0.2, .12,.1,.12); M(b,GEO.sph,0x111111, 0,0.85,0.25, .1,.09,.1); }
+  } else if(sh==='plant'){
+    if(ex==='flatleaf'){
+      M(b,GEO.cyl,c2, 0,0.25,0, .12,.12,.5);
+      M(b,GEO.sph,c1, 0,0.7,0, 1.0,.14,.55,{ry:0.5});
+    } else {
+      M(b,GEO.cyl,c2, 0,0.6,0, .16,.16,1.2);
+      for(let k=0;k<5;k++){ const a=k/5*Math.PI*2; M(b,GEO.sph,c1, Math.cos(a)*0.6,1.45+(k%2)*0.25,Math.sin(a)*0.6, .55,.18,.3,{ry:-a}); }
+      M(b,GEO.sph,c1, 0,1.7,0, .4,.3,.4);
+      if(c1===0xFF9FB0) M(b,GEO.sph,0xFFD166, 0,1.85,0, .15,.12,.15);
+    }
+  } else if(sh==='prop'){
+    prop(b,s);
+  } else {
+    M(b,GEO.sph,c1, 0,0.6,0, .75,.62,.75);
+    M(b,GEO.sph,c2, 0,0.5,0.45, .45,.4,.3);
+    eyes(b,0,0.95,0.55,1.1);
+    if(ex==='shell') M(b,GEO.sph,c2, 0,0.78,-0.15, .58,.48,.58);
+    if(ex==='bugeyes'){ for(const sd of [-1,1]){ M(b,GEO.cyl,c1, sd*0.2,1.15,0.3, .06,.06,.4); const w=new THREE.Mesh(GEO.sph,mat(0xFFFFFF)); w.position.set(sd*0.2,1.4,0.3); w.scale.set(.16,.16,.14); b.add(w); const u=new THREE.Mesh(GEO.sph,mat(0x1A1A22)); u.position.set(sd*0.2,1.4,0.42); u.scale.set(.07,.07,.05); b.add(u); } }
+    if(ex==='puffy'){ M(b,GEO.sph,c1, -0.6,0.5,0, .5,.42,.5); M(b,GEO.sph,c1, 0.6,0.5,0, .5,.42,.5); }
+    if(ex==='antennae'){ for(const sd of [-1,1]){ M(b,GEO.cyl,c2, sd*0.2,1.3,-0.1, .04,.04,.5,{rz:-sd*0.3}); M(b,GEO.sph,c2, sd*0.3,1.55,-0.1, .08,.08,.08); } }
+  }
+  const sh2=new THREE.Mesh(GEO.sph,new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0.16}));
+  sh2.position.y=0.03; g.add(sh2);
+  const S=s.scale||1; b.scale.setScalar(S); sh2.scale.set(0.95*S,0.08,0.95*S);
+  return g;
+}
+function countItem(kind,i){
+  const g=new THREE.Group();
+  if(kind==='dates'){ M(g,GEO.sph,0x6A3A1A, 0,0,0, .28,.36,.28); M(g,GEO.cyl,0x3A5A2A, 0,0.38,0, .04,.04,.15); }
+  else if(kind==='coins'){ M(g,GEO.cyl,0xFFD166, 0,0,0, .3,.3,.1,{metal:.6,rough:.35,emissive:0x7A5A00,ei:.25}); }
+  else if(kind==='flags'){ M(g,GEO.cyl,0x8A8F98, 0,0.5,0, .05,.05,1.0); M(g,GEO.box,0x3A6FD0, 0.32,0.8,0, .55,.35,.05); }
+  else if(kind==='bubbles'){ M(g,GEO.sph,0xCFEFFF, 0,0,0, .28,.28,.28,{opacity:.55,rough:.1}); }
+  else if(kind==='shields'){ M(g,GEO.cyl,0x8A93A0, 0,0,0, .42,.42,.12,{rx:Math.PI/2}); M(g,GEO.sph,0xD84040, 0,0,0.12, .14,.14,.14); }
+  else if(kind==='tadpoles'){ M(g,GEO.sph,0x2A3A2A, 0,0,0, .22,.22,.3); M(g,GEO.cone,0x2A3A2A, 0,0,-0.38, .08,.08,.35,{rx:-Math.PI/2}); }
+  else if(kind==='buoys'){ M(g,GEO.sph,0xE04040, 0,0,0, .3,.35,.3); M(g,GEO.cyl,0xF0F2F5, 0,0.1,0, .31,.31,.12); M(g,GEO.cone,0xE04040, 0,0.52,0, .12,.12,.25); }
+  else if(kind==='crumbs'){ M(g,GEO.sph,0xD8B878, 0,0,0, .22,.18,.22); }
+  else if(kind==='minis'){ const cols=[0xFF5A7A,0xFFB347,0x5EC4E8,0x8FD86A,0xC88FFF,0xFF8FB0]; M(g,GEO.sph,cols[i%6], 0,0,0, .32,.38,.32); M(g,GEO.cyl,0x8A7A5A, 0,-0.52,0, .03,.03,.3); }
+  else if(kind==='hearts'){ M(g,GEO.sph,0xFF5A7A, -0.14,0.1,0, .2,.2,.2); M(g,GEO.sph,0xFF5A7A, 0.14,0.1,0, .2,.2,.2); M(g,GEO.cone,0xFF5A7A, 0,-0.14,0, .28,.28,.35,{rx:Math.PI}); }
+  g.traverse(o=>{ if(o.isMesh) o.castShadow=true; });
+  return g;
+}
+
+const groundTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d');
+  g.fillStyle='#9AA8B0'; g.fillRect(0,0,256,256);
+  for(let i=0;i<900;i++){ g.fillStyle='rgba(20,40,10,'+(0.06+Math.random()*0.16)+')'; g.beginPath(); g.arc(Math.random()*256,Math.random()*256,2+Math.random()*5,0,7); g.fill(); }
+  const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,3); return t; })();
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xf5e3b0);
+scene.fog=new THREE.Fog(0xf5e3b0, 55, 140);
+const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 400);
+camera.position.set(0,9,22);
+const renderer=new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.92;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x5f8fd8, bottom: 0xf5e3b0, sun: new THREE.Vector3(-0.4, 0.55, -0.75), sunSize: 120 },
+  bloom: 'gentle'
+});
+window.fx = fx;
+KidLib.ambience('waves');
+const controls=new OrbitControls(camera, renderer.domElement);
+controls.enableDamping=true; controls.target.set(0,2,0); controls.maxDistance=55; controls.minDistance=5;
+
+scene.add(new THREE.AmbientLight(0xc8e8ff, 0.75));
+const sun=new THREE.DirectionalLight(0xfff5d8, 1.6); sun.position.set(12,20,10); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-28; sun.shadow.camera.right=28;
+sun.shadow.camera.top=28; sun.shadow.camera.bottom=-28; scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xd0ffe0, 0x3f5a2f, 0.45));
+
+const ground=new THREE.Mesh(new THREE.CircleGeometry(24,56), new THREE.MeshStandardMaterial({ map:groundTex, roughness:1 }));
+ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+// fence ring at the horizon (farm-pattern chrome)
+(function(){
+  const fmat=new THREE.MeshStandardMaterial({ color:0xC89B6A, roughness:0.9 });
+  const N=30, R=22, pts=[];
+  for(let k=0;k<N;k++){
+    const a=k/N*Math.PI*2, x=Math.cos(a)*R, z=Math.sin(a)*R;
+    pts.push(new THREE.Vector3(x,0,z));
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.13,1.7,8), fmat);
+    post.position.set(x,0.85,z); post.castShadow=true; scene.add(post);
+  }
+  const dir=new THREE.Vector3(), mid=new THREE.Vector3(), up=new THREE.Vector3(0,1,0);
+  for(let k=0;k<N;k++){
+    const a=pts[k], b2=pts[(k+1)%N];
+    dir.subVectors(b2,a); const len=dir.length();
+    for(const h of [0.65,1.25]){
+      const rail=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,len,6), fmat);
+      mid.addVectors(a,b2).multiplyScalar(0.5); mid.y=h;
+      rail.position.copy(mid);
+      rail.quaternion.setFromUnitVectors(up, dir.clone().normalize());
+      rail.castShadow=true; scene.add(rail);
+    }
+  }
+})();
+
+// centerpiece + pale-blue decal under it
+const center=new THREE.Group(); center.position.set(0,0,-14); scene.add(center);
+
+M(center,GEO.cyl,0x7A7F88, 0,0.3,0, 1.9,0.6,1.9);
+M(center,GEO.cyl,0xD84040, 0,1.4,0, 1.15,1.15,1.15);
+M(center,GEO.cyl,0xF5F0E0, 0,2.4,0, 1.1,1.1,1.1);
+M(center,GEO.cyl,0xD84040, 0,3.4,0, 1.05,1.05,1.05);
+M(center,GEO.cyl,0xFFF2B0, 0,4.3,0, .8,.8,.8,{emissive:0xFFE08A,ei:.9});
+M(center,GEO.cone,0x8A2A2A, 0,5.1,0, 1.1,.9,1.1);
+M(center,GEO.cone,0xFFE08A, 0,4.3,2.8, 1.1,3.2,1.1,{opacity:.22,rx:Math.PI/2,emissive:0xFFE08A,ei:.4});
+
+const decal=new THREE.Mesh(new THREE.CircleGeometry(1,28), new THREE.MeshStandardMaterial({color:0xBFD3E2, roughness:1}));
+decal.rotation.x=-Math.PI/2; decal.position.set(0,0.03,-14); decal.scale.set(2.6,0.6,1); scene.add(decal);
+
+
+M(scene,GEO.cyl,0x3E7FA8, 0,0.03,-21, 15,0.08,9,{rough:.25,metal:.15});
+for(let i=0;i<3;i++){const f=new THREE.Mesh(GEO.tor,new THREE.MeshStandardMaterial({color:0xFFFFFF,roughness:.6}));
+f.position.set(-6+i*6,.12,-14-(i%2)*3);f.rotation.x=Math.PI/2;f.scale.set(1.2+i*.3,1.2+i*.3,.4);scene.add(f);}
+for(let i=0;i<6;i++){const r=new THREE.Mesh(GEO.sph,mat(0x8A8F98));const a=Math.random()*Math.PI*2,d=10+Math.random()*9;
+r.position.set(Math.cos(a)*d,.15,Math.sin(a)*d);r.scale.set(.5+Math.random()*.4,.35,.45);r.castShadow=true;scene.add(r);}
+for(let i=0;i<3;i++){const x=-13+i*13;const tr=new THREE.Mesh(GEO.cone,mat(0x2F7F3F));
+tr.position.set(x,1.0,9);tr.scale.set(1.0,2.0,1.0);tr.castShadow=true;scene.add(tr);}
+
+
+// subjects ringed around the field
+const toys=[];
+SUBJECTS.forEach((s,i)=>{
+  const g=toy(s);
+  const angle=(i/SUBJECTS.length)*Math.PI*2;
+  g.position.set(Math.cos(angle)*8, 0, Math.sin(angle)*8);
+  g.rotation.y=-angle+Math.PI;
+  g.userData.baseY=0; g.userData.idx=i;
+  const lbl=KidLib.makeLabel(s.name); lbl.position.y=3.0; g.add(lbl);
+  scene.add(g); toys.push(g);
+});
+
+// hidden counting items around the centerpiece
+const hidden=[];
+for(let i=0;i<5;i++){
+  const it=countItem('buoys',i);
+  const a=(i/5)*Math.PI*2;
+  it.position.set(Math.cos(a)*2.8, 1.0+(i%2)*0.4, Math.sin(a)*2.8);
+  it.visible=false; it.scale.setScalar(0.01); center.add(it); hidden.push(it);
+}
+let revealed=false, revealT=0;
+
+KidLib.pulse(scene, toys[0].position, 0xffd166);
+const bubble=document.getElementById('bubble'), bTitle=document.getElementById('bTitle'), bText=document.getElementById('bText');
+let current=-1;
+function showInfo(i){ const s=SUBJECTS[i]; current=i; bTitle.textContent=s.name; bText.textContent=s.name+' says... '+s.fact; bubble.classList.add('show'); blip(s.freq||440, 0.5); }
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>{ if(current>=0) blip(SUBJECTS[current].freq||440, 0.5); KidLib.speak(bText.textContent); };
+
+const countEl=document.getElementById('eggCount'), promptEl=document.getElementById('prompt'), checkBtn=document.getElementById('checkBtn');
+checkBtn.onclick=()=>{
+  countEl.textContent='5 / 5';
+  promptEl.textContent='You found all 5 buoys! Shining bright, sailor!';
+  blip(880, 0.3); setTimeout(()=>blip(1174, 0.4), 180);
+  checkBtn.disabled=true;
+};
+function reveal(){
+  if(revealed) return; revealed=true; revealT=0.0001;
+  hidden.forEach(x=>{ x.visible=true; });
+  countEl.textContent='0 / 5';
+  promptEl.textContent='Count what you see, then press "Count them!"';
+  checkBtn.disabled=false;
+}
+
+const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();
+function findRoot(obj){
+  let o=obj;
+  while(o){
+    if(o===center) return 'center';
+    if(o.userData && o.userData.idx!==undefined) return o.userData.idx;
+    o=o.parent;
+  }
+  return -1;
+}
+renderer.domElement.addEventListener('pointerdown',e=>{
+  pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=-(e.clientY/innerHeight)*2+1;
+  raycaster.setFromCamera(pointer,camera);
+  const hits=raycaster.intersectObjects(scene.children,true);
+  for(const h of hits){
+    const f=findRoot(h.object);
+    if(f==='center'){ reveal(); return; }
+    if(typeof f==='number'&&f>=0){ showInfo(f); return; }
+  }
+});
+
+const clock=new THREE.Clock();
+(function animate(){
+  requestAnimationFrame(animate);
+  const t=clock.getElapsedTime();
+  toys.forEach((g,i)=>{ g.position.y=Math.sin(t*1.2+i)*0.06; });
+  if(revealT>0){
+    revealT+=0.03;
+    hidden.forEach((h,i)=>{ const s2=Math.min(1,revealT-i*0.06); h.scale.setScalar(Math.max(0.01,s2)); h.rotation.y+=0.01; });
+    if(revealT>2) revealT=0;
+  }
+  controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera);
+})();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+const TIPS=["Lighthouses warn ships away from rocks.", "A lighthouse beam can reach far across the sea.", "Tides make the sea rise and fall each day.", "Harbor seals nap on warm sunny rocks."];
+const QUIZ=[{"q": "What do lighthouses warn about?", "opts": ["Rocks", "Clouds", "Birds"], "ans": 0}, {"q": "What catches wind on a sailboat?", "opts": ["Sails", "Anchors", "Ropes"], "ans": 0}, {"q": "What do buoys mark?", "opts": ["Safe paths", "Fish names", "Clouds"], "ans": 0}, {"q": "What is a group of fish called?", "opts": ["A school", "A class", "A team"], "ans": 0}, {"q": "What makes the sea rise and fall?", "opts": ["Tides", "Fish", "Boats"], "ans": 0}];
+window.__MORE={"Sailor": ["Sailors say port for left and starboard for right."], "Sailboat": ["The front of a boat is called the bow."], "Seagull": ["A group of seagulls is called a flock."], "Crab": ["Crabs taste with tiny hairs on their claws."], "Fish": ["Fish talk by wiggling and making tiny clicks."], "Buoy": ["Some buoys ring bells when waves rock them."]};
+KidLib.init({tips:TIPS, quiz:QUIZ});
+</script>
+</body>
+</html>

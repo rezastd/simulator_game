@@ -22,6 +22,7 @@ const APPS = [
   'garden-plants', 'rainforest-layers', 'polar-world', 'transport-museum',
   'volcano-lab', 'bug-garden', 'water-cycle', 'sports-park', 'my-house',
   'numbers-forest', 'robo-town',
+  'desert-oasis', 'pirate-cove', 'moon-base', 'rainbow-lab', 'castle-quest', 'frog-pond', 'lighthouse-bay', 'ant-city', 'balloon-sky', 'feelings-stage',
 ];
 
 (async () => {

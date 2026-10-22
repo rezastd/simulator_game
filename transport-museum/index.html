@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Transport Museum — 3D Simulator</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif;overflow:hidden;background:#d8e0ec;color:#1a2540}
+  #app{position:fixed;inset:0}
+  #err{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#5a1020;border:3px solid #ff8f8f;padding:18px 24px;border-radius:14px;color:#ffd2d2;font-size:1rem;display:none;z-index:50;max-width:90vw}
+  .hud{position:fixed;top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:10}
+  .title{font-size:1.4rem;font-weight:700;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.4)}
+  .sub{font-size:.85rem;color:#e8effa}
+  .back{pointer-events:auto;text-decoration:none;color:#fff;background:rgba(0,0,0,.3);border:2px solid rgba(255,255,255,.5);padding:8px 14px;border-radius:999px;font-size:.9rem}
+  .back:hover{background:rgba(0,0,0,.5)}
+  .bubble{position:fixed;left:50%;bottom:210px;transform:translateX(-50%);background:rgba(20,30,50,.96);border:3px solid rgba(150,180,255,.5);border-radius:24px;padding:18px 24px;max-width:min(90vw,440px);text-align:center;z-index:20;box-shadow:0 12px 40px rgba(0,0,0,.5);color:#fff;opacity:0;pointer-events:none;transition:opacity .3s}
+  .bubble.show{opacity:1;pointer-events:auto}
+  .bubble h3{font-size:1.35rem;margin-bottom:6px}
+  .bubble p{font-size:1.05rem;line-height:1.5}
+  .bubble .sound{margin-top:10px;background:#9fc0ff;color:#101a30;border:none;border-radius:999px;padding:10px 18px;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit}
+  .bubble .close{margin-left:8px;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:999px;padding:10px 16px;font-size:1rem;cursor:pointer;font-family:inherit}
+  .strip{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:15;flex-wrap:wrap;justify-content:center}
+  .btn{padding:8px 14px;border-radius:999px;border:3px solid rgba(0,0,0,.15);cursor:pointer;background:rgba(255,255,255,.85);color:#1a2540;font-family:inherit;font-size:.9rem;font-weight:700;transition:transform .15s,border-color .15s}
+  .btn:hover{transform:scale(1.08);border-color:#4a6ab0}
+  .btn.active{border-color:#ffd166;box-shadow:0 0 12px rgba(255,209,102,.6)}
+  .hint{position:fixed;bottom:142px;left:50%;transform:translateX(-50%);color:#4a5a7a;font-size:.85rem;text-align:center;z-index:12;pointer-events:none;text-shadow:0 1px 3px rgba(255,255,255,.6)}
+</style>
+</head>
+<body>
+<div id="app"></div><div id="err"></div>
+<div class="hud"><div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15.5v-2.8l2-4.2h14l2 4.2v2.8"/>
+    <path d="M3 12.7h18"/>
+    <circle cx="7" cy="16.6" r="1.7"/>
+    <circle cx="17" cy="16.6" r="1.7"/>
+    <path d="M5.6 8.5 7 5.5h10l1.4 3" opacity=".6"/></svg>Transport Museum<div class="sub">Tap a vehicle to learn how it moves</div></div><a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a></div>
+<div class="bubble" id="bubble"><h3 id="bTitle"></h3><p id="bText"></p><div><button class="sound" id="bRead">🔊 Read aloud</button><button class="close" id="bClose">✕</button></div></div>
+<div class="hint">Tap a vehicle or its button</div><div class="strip" id="strip"></div>
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script src="../assets/kid-lib.js"></script>
+<script src="../assets/models-lib.js"></script>
+<script type="importmap">{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+try {
+const DATA=[
+  {name:'Car',color:0xe84a4a,y:0.4,real:{url:'../assets/models/ferrari.glb',height:0.9},fact:'A car is a wheeled vehicle that people drive on roads.'},
+  {name:'Train',color:0x4a6ab0,y:0.5,fact:'A train runs on rails and can carry many people or goods.'},
+  {name:'Airplane',color:0xe8e8f0,y:3.0,fact:'An airplane flies high in the sky using wings and engines.'},
+  {name:'Boat',color:0x4a9f8a,y:0.6,fact:'A boat floats on water and is pushed by oars or a propeller.'},
+  {name:'Truck',color:0xf0f0f0,y:0.4,real:{url:'../assets/models/truck.glb',height:1.3},fact:'A delivery truck carries milk, bread and boxes all over the town.'},
+  {name:'Rocket',color:0xd8d8e8,y:2.0,fact:'A rocket zooms into space using powerful engines and fuel.'},
+  {name:'Bicycle',color:0x2a8f6a,y:0.5,fact:'A bicycle has two wheels and is powered by your own legs!'}
+];
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xd8e0ec);scene.fog=new THREE.Fog(0xd8e0ec,40,100);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,400);camera.position.set(0,9,28);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.95;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/studio-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x27437a, bottom: 0x9fb4cc, sun: new THREE.Vector3(0.35, 0.5, -0.8), sunSize: 90 },
+  bloom: 'soft'
+});
+window.fx = fx;/* HDR from Realism.setup provides the environment */KidLib.ambience('city');
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,1.5,0);controls.maxDistance=45;controls.minDistance=5;
+scene.add(new THREE.AmbientLight(0xffffff,0.85));
+const sun=new THREE.DirectionalLight(0xfff5d8,1.5);sun.position.set(10,20,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xe8f0ff,0x8a9ab8,0.5));
+// museum floor
+const floor=new THREE.Mesh(new THREE.CircleGeometry(26,56),new THREE.MeshStandardMaterial({color:0xc0c8d8,roughness:0.85}));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;scene.add(floor);
+// display rings
+for(let i=0;i<6;i++){const a=i/6*Math.PI*2;const ring=new THREE.Mesh(new THREE.RingGeometry(1.6,1.8,40),new THREE.MeshBasicMaterial({color:0xffd166,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.set(Math.cos(a)*8,0.02,Math.sin(a)*8);scene.add(ring);}
+function wheel(x,y,z,r,rim){
+  const g=new THREE.Group();
+  const tyre=new THREE.Mesh(new THREE.CylinderGeometry(r,r,r*0.55,18),new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:0.85}));
+  tyre.rotation.z=Math.PI/2; g.add(tyre);
+  const hub=new THREE.Mesh(new THREE.CylinderGeometry(r*0.5,r*0.5,r*0.62,14),new THREE.MeshStandardMaterial({color:rim||0xc8c8d0,roughness:0.3,metalness:0.7}));
+  hub.rotation.z=Math.PI/2; g.add(hub);
+  g.position.set(x,y,z); g.castShadow=true; return g;
+}
+function windowPane(w,h,color,x,y,z,ry){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,0.06),new THREE.MeshStandardMaterial({color:color||0x9fd0ee,roughness:0.1,metalness:0.55}));
+  m.position.set(x,y,z); if(ry!==undefined)m.rotation.y=ry; m.castShadow=true; return m;
+}
+function build(d){
+  const g=new THREE.Group(); const mat=new THREE.MeshStandardMaterial({color:d.color,roughness:0.35,metalness:0.35}); const name=d.name;
+  const glass=0x9fd0ee, dark=0x2a2a32, chrome=0xd8d8e0;
+  if(name==='Car'){
+    const body=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.62,1.05),mat); body.position.y=0.62; body.castShadow=true; g.add(body);
+    const hood=new THREE.Mesh(new THREE.BoxGeometry(1.0,0.22,1.0),mat); hood.position.set(0.75,0.98,0); g.add(hood);
+    const cab=new THREE.Mesh(new THREE.BoxGeometry(1.05,0.55,0.92),new THREE.MeshStandardMaterial({color:d.color,roughness:0.3,metalness:0.4})); cab.position.set(-0.25,1.18,0); cab.castShadow=true; g.add(cab);
+    g.add(windowPane(0.95,0.4,glass,-0.25,1.2,0.47));
+    g.add(windowPane(0.95,0.4,glass,-0.25,1.2,-0.47));
+    g.add(windowPane(0.5,0.4,glass,0.28,1.2,0.47,Math.PI/2));
+    const bump=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.2,1.02),new THREE.MeshStandardMaterial({color:chrome,roughness:0.25,metalness:0.85})); bump.position.set(1.12,0.55,0); g.add(bump);
+    for(const s of [1,-1]){ const hl=new THREE.Mesh(new THREE.SphereGeometry(0.14,12,12),new THREE.MeshStandardMaterial({color:0xfff2c0,emissive:0xffdd88,emissiveIntensity:0.6})); hl.position.set(1.1,0.72,s*0.34); hl.scale.z=0.5; g.add(hl); }
+    g.add(wheel(0.72,0.32,0.55,0.32)); g.add(wheel(0.72,0.32,-0.55,0.32));
+    g.add(wheel(-0.72,0.32,0.55,0.32)); g.add(wheel(-0.72,0.32,-0.55,0.32));
+    const door=new THREE.Mesh(new THREE.BoxGeometry(0.02,0.35,1.0),new THREE.MeshStandardMaterial({color:dark})); door.position.set(0.1,0.75,0); g.add(door);
+  }
+  else if(name==='Train'){
+    for(let k=0;k<3;k++){
+      const x=k*2.3-2.3;
+      const coach=new THREE.Mesh(new THREE.BoxGeometry(2.1,1.25,0.95),mat); coach.position.set(x,0.85,0); coach.castShadow=true; g.add(coach);
+      const roof=new THREE.Mesh(new THREE.BoxGeometry(2.15,0.28,1.0),new THREE.MeshStandardMaterial({color:0xd0d0e0,roughness:0.4,metalness:0.5})); roof.position.set(x,1.6,0); roof.castShadow=true; g.add(roof);
+      for(let w=0;w<4;w++){ g.add(windowPane(0.32,0.34,glass,x-0.72+w*0.48,1.1,0.49)); g.add(windowPane(0.32,0.34,glass,x-0.72+w*0.48,1.1,-0.49)); }
+      const stripe=new THREE.Mesh(new THREE.BoxGeometry(2.12,0.12,0.97),new THREE.MeshStandardMaterial({color:0xf0c040,roughness:0.5})); stripe.position.set(x,0.5,0); g.add(stripe);
+      const c=new THREE.Mesh(new THREE.BoxGeometry(0.25,0.12,0.25),new THREE.MeshStandardMaterial({color:dark})); c.position.set(x+1.12,0.5,0); g.add(c);
+    }
+    const loco=new THREE.Mesh(new THREE.BoxGeometry(1.3,1.0,0.95),new THREE.MeshStandardMaterial({color:0x2f6f4f,roughness:0.4,metalness:0.4})); loco.position.set(-4.2,0.9,0); loco.castShadow=true; g.add(loco);
+    const chimney=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.2,0.6,12),dark); chimney.position.set(-4.7,1.65,0); g.add(chimney);
+    g.add(windowPane(0.5,0.35,glass,-4.1,1.15,0.49));
+    for(let k=0;k<4;k++){ g.add(wheel(-4.7+k*0.55,0.28,0.48,0.22)); g.add(wheel(-4.7+k*0.55,0.28,-0.48,0.22)); }
+  }
+  else if(name==='Airplane'){
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(0.62,0.62,3.2,20),mat); body.rotation.z=Math.PI/2; body.position.set(-0.3,1.0,0); body.castShadow=true; g.add(body);
+    const nose=new THREE.Mesh(new THREE.SphereGeometry(0.62,20,20),new THREE.MeshStandardMaterial({color:0xf0f0f8,roughness:0.3,metalness:0.4})); nose.position.set(1.4,1.0,0); nose.scale.x=1.5; g.add(nose);
+    const cock=new THREE.Mesh(new THREE.SphereGeometry(0.5,16,16),new THREE.MeshStandardMaterial({color:0x2a3a4a,roughness:0.1,metalness:0.7})); cock.position.set(1.55,1.15,0); cock.scale.set(0.9,0.7,0.9); g.add(cock);
+    for(let k=0;k<5;k++){ const w=new THREE.Mesh(new THREE.SphereGeometry(0.07,8,8),glass); w.position.set(0.9-k*0.45,1.15,0.56); w.scale.z=0.4; g.add(w); const w2=w.clone(); w2.position.z=-0.56; g.add(w2); }
+    for(const s of [1,-1]){
+      const wing=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.12,3.4),mat); wing.position.set(-0.7,0.9,s*1.7); wing.castShadow=true; g.add(wing);
+      const tip=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.3),mat); tip.position.set(-0.7,0.9,s*3.3); g.add(tip);
+      const eng=new THREE.Mesh(new THREE.CylinderGeometry(0.28,0.3,0.9,14),new THREE.MeshStandardMaterial({color:chrome,roughness:0.3,metalness:0.8})); eng.rotation.z=Math.PI/2; eng.position.set(-0.4,0.65,s*1.7); g.add(eng);
+      const prop=new THREE.Mesh(new THREE.BoxGeometry(0.06,1.3,0.16),dark); prop.position.set(0.1,0.65,s*1.7); g.add(prop);
+    }
+    const fin=new THREE.Mesh(new THREE.BoxGeometry(0.7,1.1,0.12),mat); fin.position.set(-2.1,1.6,0); fin.castShadow=true; g.add(fin);
+    const tailplane=new THREE.Mesh(new THREE.BoxGeometry(0.6,0.1,1.5),mat); tailplane.position.set(-1.9,1.0,0); g.add(tailplane);
+  }
+  else if(name==='Boat'){
+    const hull=new THREE.Mesh(new THREE.SphereGeometry(1.5,20,16),mat); hull.scale.set(1.0,0.55,1.7); hull.position.y=0.45; hull.castShadow=true; g.add(hull);
+    const deck=new THREE.Mesh(new THREE.BoxGeometry(1.8,0.12,3.2),new THREE.MeshStandardMaterial({color:0xd8c8a0,roughness:0.8})); deck.position.y=0.85; g.add(deck);
+    const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.2,0.7,1.0),new THREE.MeshStandardMaterial({color:0xf0f0f5,roughness:0.5})); cabin.position.set(0,1.2,-0.5); cabin.castShadow=true; g.add(cabin);
+    g.add(windowPane(0.9,0.35,glass,0,1.25,-0.01));
+    const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.09,3.2,10),new THREE.MeshStandardMaterial({color:0x5a3a22})); mast.position.set(0,2.2,-1.2); mast.castShadow=true; g.add(mast);
+    const sail=new THREE.Mesh(new THREE.PlaneGeometry(1.5,2.2),new THREE.MeshStandardMaterial({color:0xfafaf0,side:THREE.DoubleSide,roughness:0.9})); sail.position.set(0,2.3,-0.9); sail.castShadow=true; g.add(sail);
+    const boom=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.6,8),new THREE.MeshStandardMaterial({color:0x5a3a22})); boom.position.set(0,1.25,-0.9); boom.rotation.x=Math.PI/2; g.add(boom);
+    for(const s of [1,-1]){ const rail=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,3.0,8),chrome); rail.rotation.x=Math.PI/2; rail.position.set(s*0.85,1.3,0); g.add(rail); }
+  }
+  else if(name==='Rocket'){
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(0.6,0.9,3.4,20),new THREE.MeshStandardMaterial({color:0xf0f0f8,roughness:0.3,metalness:0.45})); body.position.y=1.9; body.castShadow=true; g.add(body);
+    const nose=new THREE.Mesh(new THREE.ConeGeometry(0.6,1.1,20),new THREE.MeshStandardMaterial({color:0xe84a4a,roughness:0.35,metalness:0.4})); nose.position.y=4.15; nose.castShadow=true; g.add(nose);
+    const band=new THREE.Mesh(new THREE.CylinderGeometry(0.61,0.61,0.4,20),new THREE.MeshStandardMaterial({color:0xe84a4a,roughness:0.4})); band.position.y=2.2; g.add(band);
+    const port=new THREE.Mesh(new THREE.CircleGeometry(0.22,18),new THREE.MeshStandardMaterial({color:0x4a8fd8,roughness:0.1,metalness:0.7,emissive:0x2a5a88,emissiveIntensity:0.5})); port.position.set(0,3.0,0.62); g.add(port);
+    const rim=new THREE.Mesh(new THREE.TorusGeometry(0.24,0.05,8,18),chrome); rim.position.set(0,3.0,0.62); g.add(rim);
+    for(let k=0;k<3;k++){ const a=k/3*Math.PI*2; const fin=new THREE.Mesh(new THREE.ConeGeometry(0.3,1.0,8),new THREE.MeshStandardMaterial({color:0xd8d8e8,roughness:0.4})); fin.position.set(Math.cos(a)*0.95,0.7,Math.sin(a)*0.95); fin.rotation.z=Math.cos(a)*0.5; fin.rotation.x=Math.sin(a)*0.5; fin.castShadow=true; g.add(fin); }
+    const flame=new THREE.Mesh(new THREE.ConeGeometry(0.32,1.1,14),new THREE.MeshBasicMaterial({color:0xffa040})); flame.rotation.x=Math.PI; flame.position.y=0.1; g.add(flame);
+    const flame2=new THREE.Mesh(new THREE.ConeGeometry(0.18,0.6,12),new THREE.MeshBasicMaterial({color:0xfff0a0})); flame2.rotation.x=Math.PI; flame2.position.y=0.0; g.add(flame2);
+  }
+  else {
+    const frame=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.055,1.7,10),new THREE.MeshStandardMaterial({color:0x2a2a32,roughness:0.4,metalness:0.6})); frame.rotation.z=Math.PI/2; frame.position.y=0.85; g.add(frame);
+    const seat=new THREE.Mesh(new THREE.BoxGeometry(0.28,0.1,0.34),new THREE.MeshStandardMaterial({color:0x2a2a32})); seat.position.set(-0.42,1.12,0); g.add(seat);
+    const back=new THREE.Mesh(new THREE.BoxGeometry(0.1,0.3,0.34),new THREE.MeshStandardMaterial({color:0x2a2a32})); back.position.set(-0.56,1.3,0); g.add(back);
+    const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.045,0.55,10),new THREE.MeshStandardMaterial({color:0x2a2a32,metalness:0.5})); handle.position.set(0.95,1.2,0); handle.rotation.z=Math.PI/2; g.add(handle);
+    g.add(wheel(0.62,0.32,0,0.32,0xc0c0c8)); g.add(wheel(-0.62,0.32,0,0.32,0xc0c0c8));
+    const pedal=new THREE.Mesh(new THREE.BoxGeometry(0.2,0.05,0.12),dark); pedal.position.set(0.25,0.6,0.12); g.add(pedal);
+    const basket=new THREE.Mesh(new THREE.BoxGeometry(0.4,0.25,0.3),new THREE.MeshStandardMaterial({color:0x8a8f9a})); basket.position.set(0.9,1.35,0); g.add(basket);
+  }
+  return g;
+}
+const vehicles=[];
+DATA.forEach((d,i)=>{const g=build(d);const a=i/DATA.length*Math.PI*2;g.position.set(Math.cos(a)*8,d.y,Math.sin(a)*8);g.rotation.y=-a+Math.PI;const lbl=KidLib.makeLabel(d.name,{scale:1.3});lbl.position.y=2.6;g.add(lbl);scene.add(g);vehicles.push({data:d,group:g}); if(d.real){ ModelsLib.useReal(scene, g, d.real.url, { targetHeight: d.real.height, label: lbl }); }});
+KidLib.pulse(scene, vehicles[0].group.position);
+const strip=document.getElementById('strip');
+vehicles.forEach((d,idx)=>{const b=document.createElement('button');b.className='btn';b.textContent=d.data.name;b.addEventListener('click',()=>showInfo(idx));strip.appendChild(b);});
+const bubble=document.getElementById('bubble'),bTitle=document.getElementById('bTitle'),bText=document.getElementById('bText');
+function showInfo(idx){const d=vehicles[idx];bTitle.textContent=d.data.name;bText.textContent=d.data.fact;bubble.classList.add('show');document.querySelectorAll('.btn').forEach(x=>x.classList.remove('active'));strip.children[idx].classList.add('active');}
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown',e=>{pointer.x=(e.clientX/innerWidth)*2-1;pointer.y=-(e.clientY/innerHeight)*2+1;raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(scene.children,true);for(const h of hits){for(let i=0;i<vehicles.length;i++){if(vehicles[i].group.children.includes(h.object)){showInfo(i);return;}}}});
+const clock=new THREE.Clock();
+(function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();vehicles.forEach((d,i)=>{d.group.rotation.y+=0.004;const flying=d.data.name==='Rocket';if(flying)d.group.position.y=2+Math.sin(t*0.8+i)*0.7;});controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera);})();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+} catch(err){console.error('TRANSPORT ERROR:',err);document.getElementById('err').style.display='block';document.getElementById('err').textContent='Oops! Something went wrong: '+err.message;}
+</script>
+<script>
+const TIPS=['Vehicles help us travel faster than walking.','Some vehicles go on land, some on water, some in air.','Land vehicles use wheels or tracks.','Water vehicles float on the sea.','Air and space vehicles fly high above.'];
+const QUIZ=[{q:'Which vehicle runs on rails?',opts:['Train','Car','Boat'],ans:0},{q:'Which vehicle goes to space?',opts:['Airplane','Rocket','Train'],ans:1},{q:'Which vehicle has two wheels?',opts:['Bicycle','Car','Train'],ans:0},{q:'Which floats on water?',opts:['Boat','Rocket','Car'],ans:0},{q:'A bicycle is powered by?',opts:['Your legs','Fuel','Wind'],ans:0}];
+window.__MORE={'Car':['Cars need fuel or electricity to move.','Modern cars can be very safe with seat belts and airbags.'],'Train':['Trains can be very long.','The first trains used steam engines.'],'Airplane':['Airplanes lift off because of wing shape.','They can cross oceans in hours.'],'Boat':['Boats stay afloat because they are buoyant.','Some boats are powered by sails and wind.'],'Rocket':['Rockets carry fuel to burn in space.','They are how we reach the Moon and beyond.'],'Bicycle':['Bikes are good for the planet, no fuel needed.','Helmets keep riders safe.' ]};
+KidLib.init({tips:TIPS,quiz:QUIZ});
+</script>
+</body>
+</html>

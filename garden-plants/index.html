@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Garden Planet — 3D Simulator</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif; overflow:hidden; background:#7ec867; color:#fff; }
+  #app { position:fixed; inset:0; }
+  #err { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); background:#5a1020; border:3px solid #ff8f8f; padding:18px 24px; border-radius:14px; color:#ffd2d2; font-size:1rem; display:none; z-index:50; max-width:90vw; }
+  .hud { position:fixed; top:0; left:0; right:0; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:10; }
+  .title { font-size:1.4rem; font-weight:700; text-shadow:0 2px 8px rgba(0,0,0,.45); }
+  .sub { font-size:.85rem; color:#e8ffdc; }
+  .back { pointer-events:auto; text-decoration:none; color:#fff; background:rgba(0,0,0,.28); border:2px solid rgba(255,255,255,.4); padding:8px 14px; border-radius:999px; font-size:.9rem; }
+  .back:hover { background:rgba(0,0,0,.45); }
+  .panel { position:fixed; right:14px; top:64px; width:232px; background:rgba(14,30,16,.72); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px); border:1px solid rgba(255,255,255,.18); border-radius:20px; padding:16px; z-index:15; box-shadow:0 12px 36px rgba(0,0,0,.45); }
+  .panel h3 { font-size:1.05rem; margin-bottom:10px; }
+  .seed { display:block; width:100%; text-align:left; margin:6px 0; padding:9px 12px; border-radius:12px; border:1.5px solid rgba(255,255,255,.2); background:rgba(255,255,255,.08); color:#fff; font-family:inherit; font-size:.92rem; font-weight:700; cursor:pointer; transition:transform .12s, border-color .15s; }
+  .seed:hover { transform:translateX(4px); border-color:#ffd166; }
+  .seed.active { border-color:#ffd166; background:rgba(255,209,102,.18); }
+  .act { display:flex; gap:8px; margin-top:12px; }
+  .act button { flex:1; padding:10px 8px; border:none; border-radius:12px; font-family:inherit; font-weight:800; font-size:.9rem; cursor:pointer; transition:transform .12s; }
+  .act .water { background:linear-gradient(135deg,#4fc3f7,#3a8fd0); color:#04202e; }
+  .act .clear { background:rgba(255,255,255,.14); color:#fff; }
+  .act button:hover { transform:translateY(-2px); }
+  .stage { margin-top:10px; font-size:.85rem; color:#d8ffcc; min-height:1.3em; line-height:1.4; }
+  .bubble { position:fixed; left:50%; bottom:210px; transform:translateX(-50%); background:rgba(12,30,14,.96); border:3px solid rgba(160,240,150,.45); border-radius:24px; padding:18px 24px; max-width:min(90vw,440px); text-align:center; z-index:20; box-shadow:0 12px 40px rgba(0,0,0,.6); opacity:0; pointer-events:none; transition:opacity .3s; }
+  .bubble.show { opacity:1; pointer-events:auto; }
+  .bubble h3 { font-size:1.35rem; margin-bottom:6px; color:#d8ffcc; }
+  .bubble p { font-size:1.05rem; line-height:1.5; }
+  .bubble .sound { margin-top:10px; background:#9fce6a; color:#1d2a0e; border:none; border-radius:999px; padding:10px 18px; font-size:1rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .bubble .close { margin-left:8px; background:rgba(255,255,255,.18); color:#fff; border:none; border-radius:999px; padding:10px 16px; font-size:1rem; cursor:pointer; font-family:inherit; }
+  .hint { position:fixed; bottom:142px; left:50%; transform:translateX(-50%); color:#e8ffdc; font-size:.85rem; text-align:center; z-index:12; pointer-events:none; text-shadow:0 1px 5px rgba(0,0,0,.5); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="err"></div>
+<div class="hud">
+  <div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21v-8"/>
+    <path d="M12 13C12 9.7 9.3 7 6 7c0 3.3 2.7 6 6 6Z"/>
+    <path d="M12 13c0-3.3 2.7-6 6-6 0 3.3-2.7 6-6 6Z"/>
+    <path d="M4 21h16" opacity=".7"/>
+    <path d="M7.5 21c0-1.1.9-2 2-2s2 .9 2 2M12.5 21c0-1.1.9-2 2-2s2 .9 2 2" opacity=".45"/></svg>Garden Planet<div class="sub">Plant a seed, water it, and watch it grow!</div></div>
+  <a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a>
+</div>
+<div class="panel">
+  <h3>🌰 Choose a seed</h3>
+  <button class="seed" data-s="sunflower">🌻 Sunflower</button>
+  <button class="seed" data-s="tomato">🍅 Tomato</button>
+  <button class="seed" data-s="strawberry">🍓 Strawberry</button>
+  <button class="seed" data-s="carrot">🥕 Carrot</button>
+  <button class="seed" data-s="cactus">🌵 Cactus</button>
+  <button class="seed" data-s="appletree">🍎 Apple Tree</button>
+  <div class="act">
+    <button class="water" id="waterBtn">💧 Water</button>
+    <button class="clear" id="clearBtn">🧹 Clear</button>
+  </div>
+  <div class="stage" id="stage">Pick a seed to plant it!</div>
+</div>
+<div class="bubble" id="bubble">
+  <h3 id="bTitle"></h3><p id="bText"></p>
+  <div><button class="sound" id="bRead">🔊 Read aloud</button><button class="close" id="bClose">✕</button></div>
+</div>
+<div class="hint">Click the soil to plant · water to grow · tap the plant to learn</div>
+
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script src="../assets/kid-lib.js"></script>
+
+<script type="importmap">
+{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+try {
+
+// ---- plant species ----
+const SPECIES = {
+  sunflower:{ name:'Sunflower', color:0xffd166, leaf:0x3f9f3f, kind:'tall', fruitColor:0xffd166,
+    fact:'Sunflowers turn to follow the Sun across the sky. Their heads are full of hundreds of tiny flowers!' },
+  tomato:{ name:'Tomato', color:0xe84a4a, leaf:0x2f8f3f, kind:'bush', fruitColor:0xe84a4a,
+    fact:'A tomato is a fruit — a juicy one! It grows on a vine and is full of little seeds inside.' },
+  strawberry:{ name:'Strawberry', color:0xe84a4a, leaf:0x2f8f3f, kind:'low', fruitColor:0xe84a4a,
+    fact:'Strawberries are the only fruit with their seeds on the outside. Each one has about 200 tiny seeds!' },
+  carrot:{ name:'Carrot', color:0xf08a3a, leaf:0x3f9f3f, kind:'root', fruitColor:0xf08a3a,
+    fact:'A carrot is a root that grows underground. The green top is the part you see above the soil.' },
+  cactus:{ name:'Cactus', color:0x3f9f4f, leaf:0x2f7f3f, kind:'cactus', fruitColor:0xff8fcf,
+    fact:'Cacti live in the desert and store water inside their thick stems. They can go a long time without rain!' },
+  appletree:{ name:'Apple Tree', color:0x5a3a22, leaf:0x3f8f3f, kind:'tree', fruitColor:0xff5a5a,
+    fact:'An apple tree grows from a tiny seed into a big tree. Apples grow on it once a year.' },
+};
+const STAGES = ['Seed','Seedling','Young','Fruit'];
+
+// ---- scene ----
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x7ec867);
+scene.fog=new THREE.Fog(0x7ec867, 50, 130);
+const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 400);
+camera.position.set(0,9,26);
+const renderer=new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.98;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x3a86d8, bottom: 0xdff0d0, sun: new THREE.Vector3(0.45, 0.5, -0.75), sunSize: 120 },
+  bloom: 'gentle'
+});
+window.fx = fx;
+/* HDR from Realism.setup provides the environment */
+KidLib.ambience('forest');
+const controls=new OrbitControls(camera, renderer.domElement);
+controls.enableDamping=true; controls.target.set(0,1.2,0); controls.maxDistance=45; controls.minDistance=4;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const sun=new THREE.DirectionalLight(0xfff5d0, 1.6); sun.position.set(10,20,8); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-14; sun.shadow.camera.right=14; sun.shadow.camera.top=14; sun.shadow.camera.bottom=-14; scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xd8ffe0, 0x4f7f3f, 0.5));
+
+// soil (garden bed)
+(function(){ const c=document.createElement('canvas'); c.width=c.height=512; const g=c.getContext('2d'); g.fillStyle='#5a3a22'; g.fillRect(0,0,512,512); for(let i=0;i<2400;i++){ g.fillStyle='rgba(40,22,10,'+(0.1+Math.random()*0.3)+')'; g.beginPath(); g.arc(Math.random()*512,Math.random()*512,1+Math.random()*5,0,7); g.fill(); } for(let i=0;i<300;i++){ g.fillStyle='rgba(110,160,60,0.4)'; g.beginPath(); g.arc(Math.random()*512,Math.random()*512,0.5+Math.random()*2,0,7); g.fill(); } const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,3);
+  const bed=new THREE.Mesh(new THREE.BoxGeometry(10,0.8,10), new THREE.MeshStandardMaterial({ map:t, roughness:1 })); bed.position.y=0.4; bed.receiveShadow=true; bed.castShadow=true; scene.add(bed);
+  const bedFrame=new THREE.Mesh(new THREE.BoxGeometry(10.4,0.5,10.4), new THREE.MeshStandardMaterial({ color:0x5a3a22, roughness:0.9 })); bedFrame.position.y=0.25; scene.add(bedFrame);
+})();
+// patch of grass around
+(function(){ const ground=new THREE.Mesh(new THREE.CircleGeometry(26,56), new THREE.MeshStandardMaterial({ color:0x5f9f3f, roughness:1 })); ground.rotation.x=-Math.PI/2; ground.position.y=0; ground.receiveShadow=true; scene.add(ground); })();
+
+// garden path
+(function(){ const path=new THREE.Mesh(new THREE.PlaneGeometry(3.5,20), new THREE.MeshStandardMaterial({ color:0xc8b88a, roughness:1 })); path.rotation.x=-Math.PI/2; path.position.set(0,0.04,-10); scene.add(path); })();
+
+// decorative background: cloud + sun
+(function(){ const sun2=new THREE.Mesh(new THREE.SphereGeometry(2.2,32,32), new THREE.MeshBasicMaterial({ color:0xffe08a })); sun2.position.set(-18,14,-14); scene.add(sun2); })();
+const clouds=[];
+(function(){ for(let i=0;i<4;i++){ const c=new THREE.Group(); for(let k=0;k<5;k++){ const p=new THREE.Mesh(new THREE.SphereGeometry(0.7+Math.random()*0.5,12,12), new THREE.MeshStandardMaterial({ color:0xffffff, roughness:1 })); p.position.set(k*0.8-1.6,(Math.random()-0.5)*0.4,(Math.random()-0.5)*0.5); p.scale.y=0.55; c.add(p); } c.position.set(-16+i*10, 10, -14+Math.random()*4); scene.add(c); clouds.push(c); } })();
+
+// butterfly
+const butterfly=new THREE.Group();
+(function(){ const body=new THREE.Mesh(new THREE.SphereGeometry(0.06,8,8), new THREE.MeshStandardMaterial({ color:0x333 })); butterfly.add(body); for(const s of [1,-1]){ const w=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.22), new THREE.MeshStandardMaterial({ color:0xff9f3f, side:THREE.DoubleSide })); w.position.x=s*0.18; w.rotation.y=Math.PI/2; w.rotation.z=s*0.4; butterfly.add(w); butterfly.userData.w=butterfly.userData.w||[]; butterfly.userData.w.push(w); } butterfly.position.set(3,2.5,2); scene.add(butterfly); })();
+
+// helper: leaf
+function leafMesh(color){ return new THREE.Mesh(new THREE.SphereGeometry(0.28,10,10), new THREE.MeshStandardMaterial({ color, roughness:0.8 })); }
+
+// plant builder at a given stage
+function buildPlant(key, stage){
+  const sp=SPECIES[key];
+  const g=new THREE.Group();
+  const stemMat=new THREE.MeshStandardMaterial({ color:0x3f8f2f, roughness:0.85 });
+  const leafMat=new THREE.MeshStandardMaterial({ color:sp.leaf, roughness:0.8 });
+  const fruitMat=new THREE.MeshStandardMaterial({ color:sp.fruitColor, roughness:0.5, metalness:0.05 });
+  // seed stage: little mound
+  if(stage===0){ const m=new THREE.Mesh(new THREE.SphereGeometry(0.12,10,10), new THREE.MeshStandardMaterial({ color:0x8a6a3a })); m.scale.y=0.6; m.position.y=0.06; g.add(m); return g; }
+  if(key==='sunflower'){
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.12, 2.4*stage/3+0.2, 8), stemMat); stem.position.y=(1.2*stage/3+0.1); stem.castShadow=true; g.add(stem);
+    for(const s of [1,-1]){ const leaf=new THREE.Mesh(new THREE.SphereGeometry(0.22,10,10), leafMat); leaf.position.set(s*0.35, 0.5*stage/3+0.3, 0); leaf.scale.set(1.4,0.5,0.8); leaf.castShadow=true; g.add(leaf); }
+    if(stage>=2){ const head=new THREE.Mesh(new THREE.SphereGeometry(0.5,18,18), new THREE.MeshStandardMaterial({ color:0xffd166, roughness:0.7 })); head.position.y=2.4*stage/3+0.5; head.scale.set(1,0.5,1); head.castShadow=true; g.add(head); }
+    if(stage>=3){ const petals=new THREE.Mesh(new THREE.TorusGeometry(0.5,0.12,10,24), new THREE.MeshStandardMaterial({ color:0xffb347 })); petals.position.y=2.4*stage/3+0.5; petals.rotation.x=Math.PI/2; g.add(petals); }
+  } else if(key==='tomato'){
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.1, 1.2*stage/3+0.1, 8), stemMat); stem.position.y=0.6*stage/3+0.05; g.add(stem);
+    if(stage>=1){ const bush=new THREE.Mesh(new THREE.SphereGeometry(0.5*stage/3+0.2,12,12), leafMat); bush.position.y=0.6*stage/3+0.4; bush.scale.y=0.8; bush.castShadow=true; g.add(bush); }
+    if(stage>=3){ for(let k=0;k<4;k++){ const f=new THREE.Mesh(new THREE.SphereGeometry(0.16,10,10), fruitMat); f.position.set((k-1.5)*0.35, 0.6+0.2*(k%2), (k%2?0.3:-0.3)); f.castShadow=true; g.add(f); } }
+  } else if(key==='strawberry'){
+    if(stage>=1){ const bush=new THREE.Mesh(new THREE.SphereGeometry(0.5*stage/3+0.15,12,12), leafMat); bush.position.y=0.25; bush.scale.set(1,0.5,1); bush.castShadow=true; g.add(bush); }
+    if(stage>=3){ for(let k=0;k<3;k++){ const f=new THREE.Mesh(new THREE.SphereGeometry(0.18,10,10), fruitMat); f.position.set((k-1)*0.4, 0.15, (k%2?0.3:-0.3)); f.scale.y=0.8; f.castShadow=true; g.add(f); } }
+  } else if(key==='carrot'){
+    if(stage>=1){ const top=new THREE.Mesh(new THREE.ConeGeometry(0.4*stage/3+0.12, 0.8*stage/3+0.2, 8), leafMat); top.position.y=0.4*stage/3+0.25; top.castShadow=true; g.add(top); }
+    if(stage>=3){ const carrot=new THREE.Mesh(new THREE.ConeGeometry(0.3,1.0,10), new THREE.MeshStandardMaterial({ color:0xf08a3a, roughness:0.8 })); carrot.position.y=0.3; carrot.rotation.x=Math.PI; g.add(carrot); }
+  } else if(key==='cactus'){
+    const h=1.4*stage/3+0.3;
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.38,h,12), new THREE.MeshStandardMaterial({ color:0x3f9f4f, roughness:0.8 })); body.position.y=h/2; body.castShadow=true; g.add(body);
+    if(stage>=2){ for(const s of [1,-1]){ const arm=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.14,0.7,10), new THREE.MeshStandardMaterial({ color:0x3f9f4f })); arm.position.set(s*0.45, h*0.5, 0); arm.rotation.z=s*(-0.4); g.add(arm); } }
+    if(stage>=3){ const flower=new THREE.Mesh(new THREE.SphereGeometry(0.14,10,10), new THREE.MeshStandardMaterial({ color:0xff8fcf })); flower.position.y=h+0.14; g.add(flower); }
+    // spines
+    for(let i=0;i<16;i++){ const spine=new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,0.14,6), new THREE.MeshStandardMaterial({ color:0xe8f0e0 })); const a=i/16*Math.PI*2, y=(i/16)*h; spine.position.set(Math.cos(a)*0.35, y+0.2, Math.sin(a)*0.35); spine.rotation.x=Math.PI/2; spine.rotation.z=a; g.add(spine); }
+  } else { // apple tree
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.3, 2.2*stage/3+0.3, 8), new THREE.MeshStandardMaterial({ color:0x5a3a22, roughness:0.95 })); trunk.position.y=1.1*stage/3+0.15; trunk.castShadow=true; g.add(trunk);
+    if(stage>=1){ const crown=new THREE.Mesh(new THREE.SphereGeometry(0.9*stage/3+0.4,16,16), leafMat); crown.position.y=2.2*stage/3+0.9; crown.castShadow=true; g.add(crown); }
+    if(stage>=3){ for(let k=0;k<6;k++){ const f=new THREE.Mesh(new THREE.SphereGeometry(0.18,10,10), fruitMat); const a=k/6*Math.PI*2; f.position.set(Math.cos(a)*0.7, 2.2+0.25, Math.sin(a)*0.7); f.castShadow=true; g.add(f); } }
+  }
+  return g;
+}
+
+// current planted selection
+let currentKey='sunflower';
+let currentStage=0;
+let currentPlant=null;
+let planted=false;
+let plantLabel=null;
+function plantTopY(){
+  if(!currentPlant) return 1.2;
+  if(currentKey==='sunflower') return 2.4*currentStage/3+1.4;
+  if(currentKey==='appletree') return 2.2*currentStage/3+2.0;
+  if(currentKey==='cactus') return 1.4*currentStage/3+1.0;
+  if(currentKey==='tomato') return 0.6*currentStage/3+1.2;
+  return 1.4;
+}
+function setPlantLabel(){ if(plantLabel){ currentPlant.remove(plantLabel); } plantLabel=KidLib.makeLabel(SPECIES[currentKey].name,{scale:1.2}); plantLabel.position.set(0,plantTopY(),0); currentPlant.add(plantLabel); }
+
+function setStageLabel(){ const el=document.getElementById('stage'); if(!planted){ el.textContent='Pick a seed to plant it!'; } else { el.textContent=`${SPECIES[currentKey].name}: ${STAGES[currentStage]}`; } }
+
+function plantSeed(){
+  if(currentPlant){ scene.remove(currentPlant); }
+  currentPlant=buildPlant(currentKey,0); currentPlant.position.set(0,0,0); scene.add(currentPlant); planted=true; currentStage=0; setPlantLabel();
+  setStageLabel();
+}
+function waterPlant(){
+  if(!planted){ showInfo(currentKey); return; }
+  if(currentStage<3){ currentStage++; }
+  if(currentPlant){ scene.remove(currentPlant); }
+  currentPlant=buildPlant(currentKey,currentStage); currentPlant.position.set(0,0,0); scene.add(currentPlant); setPlantLabel();
+  setStageLabel();
+  if(currentStage===3){ showInfo(currentKey,true); } else { showInfo(currentKey,false); }
+}
+function clearPlot(){ if(currentPlant){ scene.remove(currentPlant); currentPlant=null; } planted=false; currentStage=0; setStageLabel(); }
+
+document.querySelectorAll('.seed').forEach(b=>b.addEventListener('click',()=>{ document.querySelectorAll('.seed').forEach(x=>x.classList.remove('active')); b.classList.add('active'); currentKey=b.dataset.s; currentStage=0; plantSeed(); }));
+document.getElementById('waterBtn').onclick=waterPlant;
+document.getElementById('clearBtn').onclick=clearPlot;
+
+// bubble/show info
+const bubble=document.getElementById('bubble'), bTitle=document.getElementById('bTitle'), bText=document.getElementById('bText');
+function showInfo(key, mature){
+  const sp=SPECIES[key];
+  bTitle.textContent=sp.name;
+  bText.textContent = mature ? sp.fact : sp.name + ' is growing! Keep watering it to help it grow bigger.';
+  bubble.classList.add('show');
+}
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+
+// click soil/plant (walk up so nested leaves/fruit count too)
+const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();
+function plantHit(obj){
+  let o=obj;
+  while(o){
+    if(currentPlant && o===currentPlant) return true;
+    o=o.parent;
+  }
+  return false;
+}
+renderer.domElement.addEventListener('pointerdown',e=>{ pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=-(e.clientY/innerHeight)*2+1; raycaster.setFromCamera(pointer,camera); const hits=raycaster.intersectObjects(scene.children,true);
+  for(const h of hits){ if(plantHit(h.object)){ showInfo(currentKey, currentStage===3); return; } }
+  // clicked bed surface -> plant at that spot (approx)
+  if(!planted){ plantSeed(); }
+});
+KidLib.pulse(scene, new THREE.Vector3(0,1.5,0), 0x9fce6a);
+
+const clock=new THREE.Clock();
+(function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime();
+  clouds.forEach((c,i)=>{ c.position.x=-16+((t*0.8+i*10)%34); });
+  butterfly.position.x=3+Math.sin(t*0.6)*2; butterfly.position.y=2.5+Math.sin(t*2)*0.5; butterfly.rotation.y=t*0.8; (butterfly.userData.w||[]).forEach((w,wi)=>w.rotation.z=Math.sin(t*18)*0.5*(wi?1:-1));
+  if(currentPlant) currentPlant.rotation.y=Math.sin(t*0.3)*0.06;
+  controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera); })();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+plantSeed();
+
+} catch(err){
+  document.getElementById('err').style.display='block';
+  document.getElementById('err').textContent='Oops! Something went wrong loading the garden: '+err.message;
+}
+</script>
+<script>
+const TIPS=[
+  'Plants need sunlight, water, air, and soil to grow.',
+  'A seed wakes up and grows its first root downward.',
+  'Leaves make food for the plant using sunlight — that is called photosynthesis.',
+  'Some plants grow fast, others take many years.',
+  'Fruits hold seeds so new plants can grow.'
+];
+const QUIZ=[
+  {q:'What do plants need to grow?', opts:['Sunlight, water, air','Only water','Only soil'], ans:0},
+  {q:'A carrot is a?', opts:['Root','Fruit','Leaf'], ans:0},
+  {q:'A strawberry has seeds on the?', opts:['Inside','Outside','Root'], ans:1},
+  {q:'Which plant stores water in its stem?', opts:['Cactus','Sunflower','Carrot'], ans:0},
+  {q:'What do leaves make using sunlight?', opts:['Food','Water','Soil'], ans:0}
+];
+window.__MORE={
+  'Sunflower':['Each sunflower head can have over a thousand tiny flowers.','Young sunflowers follow the sun; grown ones face east.'],
+  'Tomato':['Tomatoes are actually a fruit, not a vegetable.','They are juicy and full of tiny seeds.'],
+  'Strawberry':['The strawberry is not a true berry — it is an aggregate fruit.','Its seeds are on the outside.'],
+  'Carrot':['Carrots are roots, so they grow underground.','The orange color comes from a nutrient called beta-carotene.'],
+  'Cactus':['Cacti are adapted to dry deserts.','They have spines instead of leaves to save water.'],
+  'Apple Tree':['An apple tree can live for many decades.','Apples grow on the tree and contain seeds for new trees.']
+};
+KidLib.init({ tips:TIPS, quiz:QUIZ });
+</script>
+</body>
+</html>

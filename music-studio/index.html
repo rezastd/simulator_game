@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Music Studio — 3D Simulator</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif; overflow:hidden; background:#1a1030; color:#fff; }
+  #app { position:fixed; inset:0; }
+  .hud { position:fixed; top:0; left:0; right:0; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:10; }
+  .title { font-size:1.4rem; font-weight:700; text-shadow:0 2px 10px rgba(0,0,0,.8); }
+  .sub { font-size:.85rem; color:#d0b8f0; }
+  .back { pointer-events:auto; text-decoration:none; color:#fff; background:rgba(255,255,255,.14); border:2px solid rgba(255,255,255,.32); padding:8px 14px; border-radius:999px; font-size:.9rem; }
+  .back:hover { background:rgba(255,255,255,.3); }
+  .panel { position:fixed; right:16px; top:70px; background:rgba(0,0,0,.45); border:2px solid rgba(255,255,255,.3); border-radius:18px; padding:14px 16px; z-index:15; width:200px; }
+  .panel h3 { font-size:1rem; margin-bottom:8px; }
+  .vol { font-size:1.2rem; font-weight:700; color:#ffd166; margin-bottom:8px; }
+  .vol-btn { width:100%; background:#c88fff; color:#1a1030; border:none; border-radius:999px; padding:9px; font-size:.95rem; font-weight:700; cursor:pointer; font-family:inherit; margin-bottom:6px; }
+  .demo { width:100%; background:#ffd166; color:#3a2b00; border:none; border-radius:999px; padding:9px; font-size:.95rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .bubble { position:fixed; left:50%; bottom:210px; transform:translateX(-50%); background:rgba(24,12,44,.96); border:3px solid rgba(200,143,255,.45); border-radius:24px; padding:18px 24px; max-width:min(90vw,440px); text-align:center; z-index:20; box-shadow:0 10px 36px rgba(0,0,0,.7); opacity:0; pointer-events:none; transition:opacity .3s; }
+  .bubble.show { opacity:1; pointer-events:auto; }
+  .bubble h3 { font-size:1.35rem; margin-bottom:6px; color:#e8d0ff; }
+  .bubble p { font-size:1.05rem; line-height:1.5; }
+  .bubble .sound { margin-top:10px; background:#c88fff; color:#1a1030; border:none; border-radius:999px; padding:10px 18px; font-size:1rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .bubble .close { margin-left:8px; background:rgba(255,255,255,.18); color:#fff; border:none; border-radius:999px; padding:10px 16px; font-size:1rem; cursor:pointer; font-family:inherit; }
+  .strip { position:fixed; bottom:86px; left:50%; transform:translateX(-50%); display:flex; gap:8px; z-index:15; flex-wrap:wrap; justify-content:center; }
+  .inst-btn { padding:8px 14px; border-radius:999px; border:3px solid rgba(255,255,255,.35); cursor:pointer; background:rgba(30,16,56,.8); color:#fff; font-family:inherit; font-size:.9rem; font-weight:700; transition:transform .15s, border-color .15s; }
+  .inst-btn:hover { transform:scale(1.08); border-color:#fff; }
+  .inst-btn.active { border-color:#c88fff; box-shadow:0 0 12px rgba(200,143,255,.6); }
+  .hint { position:fixed; bottom:142px; left:50%; transform:translateX(-50%); color:#d0b8f0; font-size:.85rem; text-align:center; z-index:12; pointer-events:none; text-shadow:0 1px 5px #000; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5.5l10-2V16"/>
+    <ellipse cx="6.5" cy="18" rx="2.6" ry="2.2"/>
+    <ellipse cx="16.5" cy="16" rx="2.6" ry="2.2"/></svg>Music Studio<div class="sub">Tap an instrument to hear it play</div></div>
+  <a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a>
+</div>
+<div class="panel">
+  <h3>🎚️ Sound level</h3>
+  <div class="vol" id="volLabel">🔊 Loud</div>
+  <button class="vol-btn" id="volBtn">Switch to Soft</button>
+  <button class="demo" id="demoBtn">🎵 Play a little song</button>
+</div>
+<div class="bubble" id="bubble">
+  <h3 id="bTitle"></h3><p id="bText"></p>
+  <div><button class="sound" id="bRead">🔊 Play sound</button><button class="close" id="bClose">✕</button></div>
+</div>
+<div class="hint">Tap an instrument or its button</div>
+<div class="strip" id="strip"></div>
+
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script type="importmap">
+{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+<script src="../assets/kid-lib.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+
+const DATA=[
+  { name:'Drum', color:0xe84a4a, kind:'drum', fact:'A drum makes a boom when you hit it. It is part of the percussion family.' },
+  { name:'Guitar', color:0xd9a95a, kind:'guitar', fact:'A guitar has strings you pluck. It can play happy or sad songs.' },
+  { name:'Piano', color:0x222222, kind:'piano', fact:'A piano has keys. Pressing different keys makes low and high sounds.' },
+  { name:'Violin', color:0xa8603a, kind:'violin', fact:'A violin is played with a bow that glides across its strings.' },
+  { name:'Trumpet', color:0xffce4a, kind:'trumpet', fact:'You make a trumpet sound by buzzing your lips into it. Ta-da!' },
+  { name:'Maracas', color:0x5ab5ff, kind:'maracas', fact:'Maracas are shakers. You shake them to make a rattle rhythm.' },
+];
+
+// ---- WebAudio synth ----
+const actx=(()=>{ try{ return new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } })();
+const master=actx?actx.createGain():null; if(master){ master.gain.value=0.8; master.connect(actx.destination); }
+let loud=true;
+function setVolume(l){ loud=l; if(master) master.gain.value = l? 0.8 : 0.25; }
+function noiseBuffer(){ const b=actx.createBuffer(1, actx.sampleRate*0.3, actx.sampleRate); const d=b.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+function env(t, dur, peak){ const g=actx.createGain(); g.connect(master); g.gain.setValueAtTime(0.001,t); g.gain.exponentialRampToValueAtTime(peak,t+0.02); g.gain.exponentialRampToValueAtTime(0.001,t+dur); return g; }
+function tone(freq,dur,type,peak,t0){ const t=t0||actx.currentTime; const o=actx.createOscillator(); o.type=type; o.frequency.setValueAtTime(freq,t); const g=env(t,dur,peak); o.connect(g); o.start(t); o.stop(t+dur+0.05); return o; }
+function playInstrument(kind){
+  if(!actx||!master) return; if(actx.state==='suspended') actx.resume(); const t0=actx.currentTime;
+  if(kind==='drum'){ tone(90,0.4,'sine',0.9); tone(55,0.3,'sine',0.5); }
+  else if(kind==='guitar'){ tone(196,0.9,'triangle',0.7); tone(294,0.8,'triangle',0.4,t0+0.02); }
+  else if(kind==='piano'){ tone(262,1.2,'sine',0.7); tone(392,1.0,'sine',0.35); tone(523,0.8,'sine',0.2); }
+  else if(kind==='violin'){ const o=tone(440,1.2,'sawtooth',0.5); o.frequency.setValueAtTime(440,t0); const vib=setInterval(()=>{ try{ o.frequency.setValueAtTime(440+Math.sin(actx.currentTime*12)*12, actx.currentTime); }catch(e){} },30); setTimeout(()=>clearInterval(vib),1100); }
+  else if(kind==='trumpet'){ tone(466,1.0,'square',0.35); tone(466,1.0,'sawtooth',0.3,t0+0.01); tone(698,0.6,'square',0.2,t0+0.1); }
+  else if(kind==='maracas'){ const src=actx.createBufferSource(); src.buffer=noiseBuffer(); const f=actx.createBiquadFilter(); f.type='highpass'; f.frequency.value=2000; const g=env(t0,0.3,0.8); src.connect(f); f.connect(g); src.start(t0); }
+}
+function playDemo(){
+  const seq=[176,220,262,330,392,330,262,220]; 
+  seq.forEach((f,i)=>setTimeout(()=>{ tone(f,0.4,'triangle',0.5); if(i%2==0) tone(120,0.3,'sine',0.3); }, i*320));
+}
+
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x1a1030); scene.fog=new THREE.Fog(0x1a1030, 25, 70);
+const camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 400); camera.position.set(0,9,26);
+const renderer=new THREE.WebGLRenderer({ antialias:true }); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.1;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/studio-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x1a1030, bottom: 0x4a3070, sun: new THREE.Vector3(0.1, 0.7, -0.7), sunSize: 90 },
+  bloom: 'glow'
+});
+window.fx = fx;
+KidLib.ambience('soft');
+/* HDR from Realism.setup provides the environment */
+const controls=new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.target.set(0,1.6,0); controls.maxDistance=40; controls.minDistance=5;
+
+scene.add(new THREE.AmbientLight(0x8877bb, 0.7));
+const spot=new THREE.SpotLight(0xfff0d0, 1.4, 40, 0.6); spot.position.set(0,12,4); spot.castShadow=true; spot.shadow.mapSize.set(1024,1024); scene.add(spot);
+scene.add(new THREE.HemisphereLight(0xaaa0cc, 0x1a1030, 0.4));
+
+const stage=new THREE.Mesh(new THREE.CircleGeometry(14,40), new THREE.MeshStandardMaterial({ color:0x3a2a55, roughness:0.9 })); stage.rotation.x=-Math.PI/2; stage.receiveShadow=true; scene.add(stage);
+// stage rim lights
+for(let i=0;i<12;i++){ const a=i/12*Math.PI*2; const light=new THREE.Mesh(new THREE.SphereGeometry(0.18,10,10), new THREE.MeshBasicMaterial({ color:0xffe08a })); light.position.set(Math.cos(a)*13, 0.18, Math.sin(a)*13); scene.add(light); }
+
+// baton (conductor)
+const baton=new THREE.Group();
+const batonStick=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.05,1.6,8), new THREE.MeshStandardMaterial({ color:0xffffff })); batonStick.position.y=0.8; baton.add(batonStick);
+const batonTip=new THREE.Mesh(new THREE.SphereGeometry(0.06,8,8), new THREE.MeshStandardMaterial({ color:0xff5a5a })); batonTip.position.y=1.6; baton.add(batonTip);
+baton.position.set(0,2.2,-7); scene.add(baton);
+
+function buildInstrument(d){
+  const g=new THREE.Group(); const mat=new THREE.MeshStandardMaterial({ color:d.color, roughness:0.6, metalness:0.15 });
+  if(d.kind==='drum'){ const shell=new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.9,0.6,24), mat); shell.position.y=0.6; shell.castShadow=true; g.add(shell); const head=new THREE.Mesh(new THREE.CylinderGeometry(0.9,0.9,0.08,24), new THREE.MeshStandardMaterial({ color:0xf5f0e0, roughness:0.3 })); head.position.y=0.94; g.add(head); }
+  else if(d.kind==='guitar'){ const body=new THREE.Mesh(new THREE.SphereGeometry(0.55,20,20), mat); body.scale.set(1,1.3,0.5); body.position.y=0.6; body.castShadow=true; g.add(body); const neck=new THREE.Mesh(new THREE.BoxGeometry(0.15,0.1,1.6), new THREE.MeshStandardMaterial({ color:0x4a2f18 })); neck.position.set(0,1.2,0); g.add(neck); for(let i=0;i<4;i++){ const str=new THREE.Mesh(new THREE.CylinderGeometry(0.01,0.01,1.6,6), new THREE.MeshStandardMaterial({ color:0xdddddd, metalness:0.9 })); str.position.set((i-1.5)*0.03, 1.2, 0); g.add(str); } }
+  else if(d.kind==='piano'){ const caseP=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.5,1.0), new THREE.MeshStandardMaterial({ color:0x1a1a1a, roughness:0.5 })); caseP.position.y=0.55; caseP.castShadow=true; g.add(caseP); for(let i=0;i<7;i++){ const key=new THREE.Mesh(new THREE.BoxGeometry(0.25,0.12,0.4), new THREE.MeshStandardMaterial({ color:(i===2||i===4)?0x111111:0xffffff, roughness:0.5 })); key.position.set((i-3)*0.34, 0.85, 0.1); g.add(key); } }
+  else if(d.kind==='violin'){ const v=new THREE.Mesh(new THREE.SphereGeometry(0.4,18,18), mat); v.scale.set(1,0.7,0.6); v.position.y=0.7; v.castShadow=true; g.add(v); const bow=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,2.2,8), new THREE.MeshStandardMaterial({ color:0xb8845a })); bow.rotation.z=0.5; bow.position.set(0.9,0.9,0.3); g.add(bow); }
+  else if(d.kind==='trumpet'){ const tube=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.1,1.6,12), new THREE.MeshStandardMaterial({ color:0xffce4a, metalness:0.85, roughness:0.25 })); tube.rotation.z=0.3; tube.position.y=0.8; tube.castShadow=true; g.add(tube); const bell=new THREE.Mesh(new THREE.ConeGeometry(0.35,0.5,14), new THREE.MeshStandardMaterial({ color:0xffce4a, metalness:0.85, roughness:0.25 })); bell.rotation.z=0.3; bell.position.set(0.5,1.1,0); g.add(bell); }
+  else { for(const s of [0.5,-0.5]){ const mar=new THREE.Mesh(new THREE.SphereGeometry(0.28,14,14), mat); mar.position.set(s,0.6,0); mar.castShadow=true; g.add(mar); const handle=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.9,8), new THREE.MeshStandardMaterial({ color:0x8a6a3a })); handle.position.set(s,0.1,0); g.add(handle); } }
+  return g;
+}
+const instruments=[];
+function findInstrumentRoot(obj){
+  let o=obj;
+  while(o){
+    for(let i=0;i<instruments.length;i++){ if(instruments[i].group===o) return i; }
+    o=o.parent;
+  }
+  return -1;
+}
+DATA.forEach((d,i)=>{ const g=buildInstrument(d); const a=(i/DATA.length)*Math.PI*2; g.position.set(Math.cos(a)*7, 0, Math.sin(a)*7); g.rotation.y=-a; const lbl=KidLib.makeLabel(d.name,{scale:1.2}); lbl.position.y=2.5; g.add(lbl); scene.add(g); instruments.push({data:d, group:g}); });
+KidLib.pulse(scene, instruments[0].group.position, 0xc88fff);
+
+const strip=document.getElementById('strip');
+instruments.forEach((d,idx)=>{ const b=document.createElement('button'); b.className='inst-btn'; b.textContent=d.data.name; b.addEventListener('click',()=>showInfo(idx)); strip.appendChild(b); });
+const bubble=document.getElementById('bubble'), bTitle=document.getElementById('bTitle'), bText=document.getElementById('bText');
+function showInfo(idx){ const d=instruments[idx]; bTitle.textContent=d.data.name; bText.textContent=d.data.fact; bubble.classList.add('show'); playInstrument(d.data.kind); document.querySelectorAll('.inst-btn').forEach(x=>x.classList.remove('active')); strip.children[idx].classList.add('active'); }
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+document.getElementById('volBtn').onclick=()=>{ setVolume(!loud); document.getElementById('volLabel').textContent=loud?'🔊 Loud':'🔈 Soft'; document.getElementById('volBtn').textContent=loud?'Switch to Soft':'Switch to Loud'; };
+document.getElementById('demoBtn').onclick=playDemo;
+
+const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown',e=>{ pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=-(e.clientY/innerHeight)*2+1; raycaster.setFromCamera(pointer,camera); const hits=raycaster.intersectObjects(scene.children,true); for(const h of hits){ const i=findInstrumentRoot(h.object); if(i>=0){ showInfo(i); return; } } });
+
+const clock=new THREE.Clock();
+(function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime();
+  baton.rotation.z=Math.sin(t*2.5)*0.9; baton.rotation.x=Math.sin(t*2.5+1)*0.3;
+  instruments.forEach((d,i)=>{ d.group.rotation.y+=0.003; });
+  controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera); })();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+const TIPS=[
+  'Sound is made by things that vibrate.',
+  'Fast vibrations make high sounds; slow ones make low sounds.',
+  'Loud sounds can hurt our ears if they are too strong.',
+  'Music groups instruments into families: strings, brass, and more.',
+  'A steady beat keeps music marching along in time.'
+];
+const QUIZ=[
+  {q:'Which instrument do you hit?', opts:['Drum','Violin','Trumpet'], ans:0},
+  {q:'Which instrument has keys you press?', opts:['Guitar','Piano','Maracas'], ans:1},
+  {q:'Which instrument has strings you pluck?', opts:['Drum','Guitar','Trumpet'], ans:1},
+  {q:'What makes a high sound?', opts:['Fast vibrations','Slow vibrations','No vibrations'], ans:0},
+  {q:'Which is a brass instrument?', opts:['Violin','Piano','Trumpet'], ans:2}
+];
+window.__MORE={
+  'Drum':['Drums are in the percussion family.','You play them by hitting or shaking.'],
+  'Guitar':['A guitar has six strings.','You can play chords or pluck one string at a time.'],
+  'Piano':['The piano has 88 keys.','Left-side keys make low sounds; right-side keys make high sounds.'],
+  'Violin':['The violin is the smallest string instrument in its family.','You play it with a bow made of wood and horsehair.'],
+  'Trumpet':['The trumpet is made of metal.','You change notes by pressing its three valves.'],
+  'Maracas':['Maracas are often filled with seeds or beads.','They make a rattling sound when you shake them.']
+};
+KidLib.init({tips:TIPS, quiz:QUIZ});
+</script>
+</body>
+</html>

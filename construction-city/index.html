@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Construction City — 3D Simulator</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif; overflow:hidden; background:#7f9fd0; color:#fff; }
+  #app { position:fixed; inset:0; }
+  .hud { position:fixed; top:0; left:0; right:0; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:10; }
+  .title { font-size:1.4rem; font-weight:700; text-shadow:0 2px 6px rgba(0,0,0,.4); }
+  .sub { font-size:.85rem; color:#e0e8ff; }
+  .back { pointer-events:auto; text-decoration:none; color:#fff; background:rgba(0,0,0,.28); border:2px solid rgba(255,255,255,.4); padding:8px 14px; border-radius:999px; font-size:.9rem; }
+  .back:hover { background:rgba(0,0,0,.45); }
+  .panel { position:fixed; right:16px; top:70px; background:rgba(0,0,0,.4); border:2px solid rgba(255,255,255,.3); border-radius:18px; padding:14px 16px; z-index:15; width:216px; }
+  .panel h3 { font-size:1rem; margin-bottom:8px; }
+  .shapes { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .shape-btn { flex:1; min-width:64px; padding:8px 4px; border-radius:12px; border:3px solid rgba(255,255,255,.4); background:rgba(255,255,255,.15); color:#fff; font-family:inherit; font-size:.85rem; font-weight:700; cursor:pointer; transition:transform .15s, border-color .15s; }
+  .shape-btn:hover { transform:scale(1.06); border-color:#fff; }
+  .shape-btn.active { border-color:#ffd166; background:rgba(255,209,102,.3); }
+  .colors { display:flex; gap:6px; margin-bottom:12px; }
+  .color-btn { width:34px; height:34px; border-radius:50%; border:3px solid rgba(255,255,255,.4); cursor:pointer; }
+  .color-btn.active { border-color:#ffd166; transform:scale(1.15); }
+  .stats .count { font-size:1.5rem; font-weight:700; color:#ffd166; }
+  .stats .learn { font-size:.88rem; color:#e0e8ff; margin-top:4px; line-height:1.4; }
+  .stats .done { margin-top:10px; width:100%; background:#7fd18a; color:#0f2a14; border:none; border-radius:999px; padding:9px; font-size:.95rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .stats .done:disabled { opacity:.5; cursor:default; }
+  .msg { position:fixed; left:50%; bottom:210px; transform:translateX(-50%); background:rgba(20,35,60,.95); border:3px solid rgba(255,255,255,.35); border-radius:22px; padding:14px 22px; max-width:min(90vw,420px); text-align:center; z-index:20; box-shadow:0 8px 32px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity .3s; }
+  .msg.show { opacity:1; pointer-events:auto; }
+  .msg h3 { font-size:1.25rem; margin-bottom:4px; }
+  .msg .close { margin-top:8px; background:#ffd166; color:#3a2b00; border:none; border-radius:999px; padding:9px 18px; font-size:.95rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .msg .sound { margin-top:8px; background:#7fd18a; color:#0f2a14; border:none; border-radius:999px; padding:9px 18px; font-size:.95rem; font-weight:700; cursor:pointer; font-family:inherit; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21V4h12"/>
+    <path d="M6 4 3 8M6 4l3 4"/>
+    <path d="M6 8h9"/>
+    <path d="M15 8v4"/>
+    <path d="M13 12h4v3h-4Z"/>
+    <path d="M2.5 21h7"/></svg>Construction City<div class="sub">Pick a shape & color, then add it to the tower</div></div>
+  <a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a>
+</div>
+<div class="panel">
+  <h3>🧱 Build your tower</h3>
+  <div class="shapes">
+    <button class="shape-btn active" data-shape="cube">▣ Cube</button>
+    <button class="shape-btn" data-shape="cyl">▭ Cylinder</button>
+    <button class="shape-btn" data-shape="cone">△ Cone</button>
+    <button class="shape-btn" data-shape="sphere">● Sphere</button>
+  </div>
+  <div class="colors">
+    <button class="color-btn active" data-color="0xff5a5a" style="background:#ff5a5a"></button>
+    <button class="color-btn" data-color="0xffd166" style="background:#ffd166"></button>
+    <button class="color-btn" data-color="0x5ab5ff" style="background:#5ab5ff"></button>
+    <button class="color-btn" data-color="0x5adf6a" style="background:#5adf6a"></button>
+    <button class="color-btn" data-color="0xc88fff" style="background:#c88fff"></button>
+  </div>
+  <div class="stats">
+    <div class="count" id="count">0 blocks</div>
+    <div class="learn" id="learn">Pick a shape and click "Add to tower"</div>
+    <button class="done" id="addBtn">Add to tower 🏗️</button>
+  </div>
+</div>
+<div class="msg" id="msg">
+  <h3 id="mTitle"></h3><p id="mText"></p>
+  <button class="sound" id="bRead">🔊 Read aloud</button>
+  <button class="close" id="mClose">Got it ✕</button>
+</div>
+
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script type="importmap">
+{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+<script src="../assets/kid-lib.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+
+const SHAPE_INFO={ cube:{name:'Cube', note:'A cube has 6 flat square sides.'}, cyl:{name:'Cylinder', note:'A cylinder is like a can — it rolls on its round side.'}, cone:{name:'Cone', note:'A cone has a round base and one pointy tip.'}, sphere:{name:'Sphere', note:'A sphere is perfectly round, like a ball.'} };
+
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x7f9fd0); scene.fog=new THREE.Fog(0x7f9fd0, 40, 110);
+const camera=new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 400); camera.position.set(10,12,22);
+const renderer=new THREE.WebGLRenderer({ antialias:true }); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.05;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/studio-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x3a6fd0, bottom: 0xd6e4f2, sun: new THREE.Vector3(0.4, 0.5, -0.8), sunSize: 100 },
+  bloom: 'soft'
+});
+window.fx = fx;
+/* HDR from Realism.setup provides the environment */
+KidLib.ambience('city');
+const controls=new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.target.set(0,3,0); controls.maxDistance=50; controls.minDistance=6;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+const sunLight=new THREE.DirectionalLight(0xfff5d8, 1.5); sunLight.position.set(12,20,10); sunLight.castShadow=true; sunLight.shadow.mapSize.set(2048,2048); sunLight.shadow.camera.left=-30; sunLight.shadow.camera.right=30; sunLight.shadow.camera.top=30; sunLight.shadow.camera.bottom=-30; scene.add(sunLight);
+scene.add(new THREE.HemisphereLight(0xbfd5ff, 0x3f5a30, 0.4));
+
+const ground=new THREE.Mesh(new THREE.CircleGeometry(40,56), new THREE.MeshStandardMaterial({ color:0x5f7f5a, roughness:1 })); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+// road
+const road=new THREE.Mesh(new THREE.PlaneGeometry(8,100), new THREE.MeshStandardMaterial({ color:0x4a4a55, roughness:0.95 })); road.rotation.x=-Math.PI/2; road.position.set(0,0.02,-30); scene.add(road);
+
+// base slab
+const slab=new THREE.Mesh(new THREE.BoxGeometry(4,0.5,4), new THREE.MeshStandardMaterial({ color:0x8a8a8a, roughness:0.9 })); slab.position.y=0.25; slab.receiveShadow=true; slab.castShadow=true; scene.add(slab);
+KidLib.pulse(scene, new THREE.Vector3(0,1.5,0), 0xffd166);
+
+// crane
+const crane=new THREE.Group();
+const base=new THREE.Mesh(new THREE.BoxGeometry(0.5,6,0.5), new THREE.MeshStandardMaterial({ color:0xffb020, roughness:0.7, metalness:0.4 })); base.position.y=3; base.castShadow=true; crane.add(base);
+const jib=new THREE.Mesh(new THREE.BoxGeometry(9,0.35,0.35), new THREE.MeshStandardMaterial({ color:0xffb020, roughness:0.7, metalness:0.4 })); jib.position.set(2.5,6.4,0); jib.castShadow=true; crane.add(jib);
+const hook=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.12,1.2,8), new THREE.MeshStandardMaterial({ color:0xcccccc, metalness:0.8, roughness:0.3 })); hook.position.set(4.5,5.6,0); hook.castShadow=true; crane.add(hook); crane.userData.hook=hook;
+crane.position.set(-6,0,0); scene.add(crane);
+
+// stack
+const stack=[];
+let stackHeight=0.5, currentShape='cube', currentColor=0xff5a5a, placed=0;
+
+const addBtn=document.getElementById('addBtn'), countEl=document.getElementById('count'), learnEl=document.getElementById('learn');
+function makeBlock(shape,color){
+  const mat=new THREE.MeshStandardMaterial({ color, roughness:0.6, metalness:0.1 });
+  let m;
+  if(shape==='cube') m=new THREE.Mesh(new THREE.BoxGeometry(1,1,1), mat);
+  else if(shape==='cyl') m=new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.55,1,18), mat);
+  else if(shape==='cone') m=new THREE.Mesh(new THREE.ConeGeometry(0.7,1,18), mat);
+  else m=new THREE.Mesh(new THREE.SphereGeometry(0.6,18,18), mat);
+  m.castShadow=true; return m;
+}
+function addBlock(){
+  if(placed>=12){ showMsg('🎉 You built a skyscraper!', 'You stacked 12 blocks. You are a master builder!'); return; }
+  const block=makeBlock(currentShape, currentColor);
+  block.position.y=stackHeight+0.5;
+  stack.push({mesh:block, shape:currentShape, color:currentColor});
+  scene.add(block);
+  stackHeight+=1.0; placed++;
+  countEl.textContent=placed+' block'+(placed>1?'s':'');
+  learnEl.textContent=`Great! You added a ${SHAPE_INFO[currentShape].name}. ${SHAPE_INFO[currentShape].note}`;
+  if(placed===12){ showMsg('🏗️ Tower complete!', 'You used 12 blocks to build a big tower. Can you count how many cubes?'); }
+}
+addBtn.onclick=addBlock;
+
+document.querySelectorAll('.shape-btn').forEach(b=>b.onclick=()=>{ currentShape=b.dataset.shape; document.querySelectorAll('.shape-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); showMsg(SHAPE_INFO[currentShape].name, SHAPE_INFO[currentShape].note); });
+document.querySelectorAll('.color-btn').forEach(b=>b.onclick=()=>{ currentColor=parseInt(b.dataset.color,16); document.querySelectorAll('.color-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); });
+
+const msg=document.getElementById('msg'), mTitle=document.getElementById('mTitle'), mText=document.getElementById('mText');
+function showMsg(t,txt){ mTitle.textContent=t; mText.textContent=txt; msg.classList.add('show'); }
+document.getElementById('mClose').onclick=()=>msg.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${mTitle.textContent}. ${mText.textContent}`);
+
+const clock=new THREE.Clock();
+(function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime();
+  crane.userData.hook.position.y=5.6+Math.sin(t*1.5)*0.4;
+  controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera); })();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+const TIPS=[
+  'A cube has 6 square faces — like a dice.',
+  'A cylinder has two round ends and a curved side.',
+  'A cone has a round base and one pointy top.',
+  'A sphere is perfectly round, like a ball.',
+  'Builders use strong shapes to make tall buildings safe.'
+];
+const QUIZ=[
+  {q:'Which shape is shaped like a ball?', opts:['Sphere','Cube','Cone'], ans:0},
+  {q:'Which shape has 6 square faces?', opts:['Cylinder','Cube','Sphere'], ans:1},
+  {q:'Which shape has one pointy tip?', opts:['Sphere','Cube','Cone'], ans:2},
+  {q:'Which shape can roll like a can?', opts:['Cone','Cylinder','Cube'], ans:1},
+  {q:'A dice is a?', opts:['Sphere','Cube','Cylinder'], ans:1}
+];
+window.__MORE={
+  'Cube':['All six faces of a cube are squares.','Cubes stack easily because their sides are flat.'],
+  'Cylinder':['A cylinder rolls along its round side.','Soda cans and drums are cylinders.'],
+  'Cone':['A cone is like a party hat.','Ice cream cones are cones!'],
+  'Sphere':['A sphere has no flat sides or corners.','Balls, planets, and bubbles are spheres.']
+};
+KidLib.init({tips:TIPS, quiz:QUIZ});
+</script>
+</body>
+</html>

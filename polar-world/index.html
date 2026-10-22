@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Polar World — 3D Simulator</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif;overflow:hidden;background:#dff2fb;color:#fff}
+  #app{position:fixed;inset:0}
+  #err{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#5a1020;border:3px solid #ff8f8f;padding:18px 24px;border-radius:14px;color:#ffd2d2;font-size:1rem;display:none;z-index:50;max-width:90vw}
+  .hud{position:fixed;top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:10}
+  .title{font-size:1.4rem;font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,.4)}
+  .sub{font-size:.85rem;color:#1a4a66}
+  .back{pointer-events:auto;text-decoration:none;color:#fff;background:rgba(0,0,0,.25);border:2px solid rgba(255,255,255,.5);padding:8px 14px;border-radius:999px;font-size:.9rem}
+  .back:hover{background:rgba(0,0,0,.45)}
+  .bubble{position:fixed;left:50%;bottom:210px;transform:translateX(-50%);background:rgba(20,40,60,.96);border:3px solid rgba(180,230,255,.5);border-radius:24px;padding:18px 24px;max-width:min(90vw,440px);text-align:center;z-index:20;box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .3s}
+  .bubble.show{opacity:1;pointer-events:auto}
+  .bubble h3{font-size:1.35rem;margin-bottom:6px;color:#d8f0ff}
+  .bubble p{font-size:1.05rem;line-height:1.5}
+  .bubble .sound{margin-top:10px;background:#7fc4e8;color:#04222f;border:none;border-radius:999px;padding:10px 18px;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit}
+  .bubble .close{margin-left:8px;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:999px;padding:10px 16px;font-size:1rem;cursor:pointer;font-family:inherit}
+  .strip{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:15;flex-wrap:wrap;justify-content:center}
+  .btn{padding:8px 14px;border-radius:999px;border:3px solid rgba(255,255,255,.5);cursor:pointer;background:rgba(10,40,60,.7);color:#fff;font-family:inherit;font-size:.9rem;font-weight:700;transition:transform .15s,border-color .15s}
+  .btn:hover{transform:scale(1.08);border-color:#fff}
+  .btn.active{border-color:#8fd0f0;box-shadow:0 0 12px rgba(143,208,240,.6)}
+  .hint{position:fixed;bottom:142px;left:50%;transform:translateX(-50%);color:#1a4a66;font-size:.85rem;text-align:center;z-index:12;pointer-events:none;text-shadow:0 1px 3px rgba(255,255,255,.6)}
+</style>
+</head>
+<body>
+<div id="app"></div><div id="err"></div>
+<div class="hud"><div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M3.4 7l17.2 10M20.6 7 3.4 17"/>
+    <path d="M12 5.6 9.6 3.9M12 5.6l2.4-1.7M12 18.4l-2.4 1.7M12 18.4l2.4 1.7"/>
+    <path d="M5.6 9.2 2.9 9.1M5.6 9.2 4.4 6.7M18.4 14.8l2.7.1M18.4 14.8l1.2 2.5"/>
+    <path d="M18.4 9.2l2.7-.1M18.4 9.2l1.2-2.5M5.6 14.8l-2.7.1M5.6 14.8 4.4 17.3"/></svg>Polar World<div class="sub">Tap an animal to learn about icy places</div></div><a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a></div>
+<div class="bubble" id="bubble"><h3 id="bTitle"></h3><p id="bText"></p><div><button class="sound" id="bRead">🔊 Read aloud</button><button class="close" id="bClose">✕</button></div></div>
+<div class="hint">Tap an animal or its button</div><div class="strip" id="strip"></div>
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script src="../assets/kid-lib.js"></script>
+<script src="../assets/models-lib.js"></script>
+<script type="importmap">{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+try {
+const DATA=[
+  {name:'Polar Bear',kind:'polarbear',color:0xf8f8f0,y:1.1,scale:1.25,fact:'Polar bears are the biggest bears. Their fur is white to blend in with the snow.'},
+  {name:'Penguin',kind:'penguin',color:0x1a1a2a,belly:0xf8f8f0,y:0.5,scale:1.0,fact:'Penguins are birds that cannot fly — but they are amazing swimmers!'},
+  {name:'Seal',kind:'seal',color:0x8a8a8a,y:0.4,scale:1.0,fact:'Seals are sleek swimmers with flippers instead of legs.'},
+  {name:'Walrus',kind:'walrus',color:0x9a7a5a,y:0.6,scale:1.0,fact:'Walruses have two long tusks and use them to pull out of the water.'},
+  {name:'Arctic Fox',kind:'arcticfox',color:0xf0f0f0,y:0.4,scale:1.0,fact:'The arctic fox has thick fur and a fluffy tail to stay warm.'},
+  {name:'Snowy Owl',kind:'snowyowl',color:0xf8f8f0,y:2.0,scale:1.0,fact:'Snowy owls are white to hide in the snow. They hunt mostly at night.'}
+];
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xdff2fb);scene.fog=new THREE.Fog(0xdff2fb,30,90);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,400);camera.position.set(0,9,28);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.85;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-dawn-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x5a86c0, bottom: 0xe8f4fb, sun: new THREE.Vector3(-0.3, 0.35, -0.85), sunSize: 70 },
+  bloom: 'soft'
+});
+window.fx = fx;/* HDR from Realism.setup provides the environment */KidLib.ambience('wind');
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,1.5,0);controls.maxDistance=45;controls.minDistance=5;
+scene.add(new THREE.AmbientLight(0xdfe8f0,0.45));
+const sun=new THREE.DirectionalLight(0xfff0e0,1.0);sun.position.set(10,20,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xc8dcf0,0x8aa2b8,0.3));
+// snow ground
+const ground=new THREE.Mesh(new THREE.CircleGeometry(28,56),new THREE.MeshStandardMaterial({color:0xd9e6f0,roughness:0.95}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+// icebergs
+for(let i=0;i<6;i++){const ice=new THREE.Mesh(new THREE.ConeGeometry(1+Math.random()*2,2+Math.random()*3,5),new THREE.MeshStandardMaterial({color:0xcfe8f5,roughness:0.7,flatShading:true}));ice.position.set((Math.random()-0.5)*24,1,(Math.random()-0.5)*24);ice.rotation.y=Math.random()*Math.PI;ice.castShadow=true;scene.add(ice);}
+// water patches
+for(let i=0;i<3;i++){const w=new THREE.Mesh(new THREE.CircleGeometry(2.5,24),new THREE.MeshStandardMaterial({color:0x7fc0e8,roughness:0.2,metalness:0.2}));w.rotation.x=-Math.PI/2;w.position.set((Math.random()-0.5)*20,0.06,(Math.random()-0.5)*20);scene.add(w);}
+// falling snow
+const sg=new THREE.BufferGeometry();const sp=[];for(let i=0;i<500;i++)sp.push((Math.random()-0.5)*40,Math.random()*14,(Math.random()-0.5)*40);sg.setAttribute('position',new THREE.Float32BufferAttribute(sp,3));
+const snow=new THREE.Points(sg,new THREE.PointsMaterial({color:0xffffff,size:0.12}));scene.add(snow);
+function build(a){
+  const b=ModelsLib.BUILDERS[a.kind];
+  if(!b){ return new THREE.Group(); }
+  const built=b(a);
+  built.group.scale.setScalar(a.scale||1);
+  return built;
+}
+const animals=[];
+DATA.forEach((d,i)=>{const b=build(d);const g=b.group;g.position.set((Math.random()-0.5)*14,d.y,(Math.random()-0.5)*14);g.rotation.y=Math.random()*Math.PI*2;const lbl=KidLib.makeLabel(d.name,{scale:1.3});lbl.position.y=2.4;g.add(lbl);scene.add(g);animals.push({data:d,group:g,anim:b.anim});});
+KidLib.pulse(scene, animals[0].group.position, 0x8fd0f0);
+const strip=document.getElementById('strip');
+animals.forEach((d,idx)=>{const b=document.createElement('button');b.className='btn';b.textContent=d.data.name;b.addEventListener('click',()=>showInfo(idx));strip.appendChild(b);});
+const bubble=document.getElementById('bubble'),bTitle=document.getElementById('bTitle'),bText=document.getElementById('bText');
+function showInfo(idx){const d=animals[idx];bTitle.textContent=d.data.name;bText.textContent=d.data.fact;bubble.classList.add('show');document.querySelectorAll('.btn').forEach(x=>x.classList.remove('active'));strip.children[idx].classList.add('active');}
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown',e=>{pointer.x=(e.clientX/innerWidth)*2-1;pointer.y=-(e.clientY/innerHeight)*2+1;raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(scene.children,true);for(const h of hits){for(let i=0;i<animals.length;i++){if(animals[i].group.children.includes(h.object)){showInfo(i);return;}}}});
+const clock=new THREE.Clock();
+(function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();
+  const sa=snow.geometry.attributes.position.array;for(let i=0;i<sa.length;i+=3){sa[i+1]-=0.02;sa[i]+=Math.sin(t+i)*0.005;if(sa[i+1]<0)sa[i+1]=14;}snow.geometry.attributes.position.needsUpdate=true;
+  animals.forEach((d,i)=>{ if(d.anim){ d.anim(t,i); } else { d.group.rotation.y+=0.005; } });controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera);})();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+} catch(err){document.getElementById('err').style.display='block';document.getElementById('err').textContent='Oops! Something went wrong: '+err.message;}
+</script>
+<script>
+const TIPS=['The Arctic is near the North Pole.','The Antarctic is near the South Pole.','Polar animals have thick fur or blubber for warmth.','In winter, the polar sun stays low in the sky.','Ice and snow reflect the sun\'s light.'];
+const QUIZ=[{q:'Which animal is the biggest bear?',opts:['Polar Bear','Penguin','Seal'],ans:0},{q:'Which bird cannot fly but can swim?',opts:['Snowy Owl','Penguin','Toucan'],ans:1},{q:'Which animal has tusks?',opts:['Walrus','Fox','Seal'],ans:0},{q:'Polar bears have fur that is?',opts:['White','Green','Blue'],ans:0},{q:'What covers the ground in polar places?',opts:['Ice and snow','Sand','Grass'],ans:0}];
+window.__MORE={'Polar Bear':['Polar bear skin is actually black under white fur.','They are strong swimmers and can paddle far.'],'Penguin':['Penguins huddle together to stay warm.','They slide on their bellies for fun — it is called tobogganing.'],'Seal':['Seals can close their ears underwater.','They dive deep to hunt fish.'],'Walrus':['Walruses use their tusks to pull onto ice.','They eat clams from the sea floor.'],'Arctic Fox':['Its fur changes color in summer.','It follows polar bears to eat leftover food.'],'Snowy Owl':['Snowy owls have very good hearing.','They can turn their head almost all the way around.' ]};
+KidLib.init({tips:TIPS,quiz:QUIZ});
+</script>
+</body>
+</html>

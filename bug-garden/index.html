@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bug Garden — 3D Simulator</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif;overflow:hidden;background:#5f9f3f;color:#fff}
+  #app{position:fixed;inset:0}
+  #err{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#5a1020;border:3px solid #ff8f8f;padding:18px 24px;border-radius:14px;color:#ffd2d2;font-size:1rem;display:none;z-index:50;max-width:90vw}
+  .hud{position:fixed;top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:10}
+  .title{font-size:1.4rem;font-weight:700;text-shadow:0 2px 6px rgba(0,0,0,.5)}
+  .sub{font-size:.85rem;color:#eaffdc}
+  .back{pointer-events:auto;text-decoration:none;color:#fff;background:rgba(0,0,0,.28);border:2px solid rgba(255,255,255,.4);padding:8px 14px;border-radius:999px;font-size:.9rem}
+  .back:hover{background:rgba(0,0,0,.45)}
+  .bubble{position:fixed;left:50%;bottom:210px;transform:translateX(-50%);background:rgba(30,45,20,.97);border:3px solid rgba(180,240,150,.5);border-radius:24px;padding:18px 24px;max-width:min(90vw,440px);text-align:center;z-index:20;box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .3s}
+  .bubble.show{opacity:1;pointer-events:auto}
+  .bubble h3{font-size:1.35rem;margin-bottom:6px;color:#e8ffd8}
+  .bubble p{font-size:1.05rem;line-height:1.5}
+  .bubble .sound{margin-top:10px;background:#a8d878;color:#253a10;border:none;border-radius:999px;padding:10px 18px;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit}
+  .bubble .close{margin-left:8px;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:999px;padding:10px 16px;font-size:1rem;cursor:pointer;font-family:inherit}
+  .strip{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:15;flex-wrap:wrap;justify-content:center}
+  .btn{padding:8px 14px;border-radius:999px;border:3px solid rgba(255,255,255,.4);cursor:pointer;background:rgba(30,45,20,.8);color:#fff;font-family:inherit;font-size:.9rem;font-weight:700;transition:transform .15s,border-color .15s}
+  .btn:hover{transform:scale(1.08);border-color:#fff}
+  .btn.active{border-color:#ffd166;box-shadow:0 0 12px rgba(255,209,102,.6)}
+  .hint{position:fixed;bottom:142px;left:50%;transform:translateX(-50%);color:#eaffdc;font-size:.85rem;text-align:center;z-index:12;pointer-events:none;text-shadow:0 1px 5px rgba(0,0,0,.5)}
+</style>
+</head>
+<body>
+<div id="app"></div><div id="err"></div>
+<div class="hud"><div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7.4"/>
+    <path d="M12 5.6v14.8"/>
+    <circle cx="9" cy="10.5" r="1.2"/>
+    <circle cx="15" cy="10.5" r="1.2"/>
+    <circle cx="9.8" cy="15" r="1"/>
+    <circle cx="14.4" cy="15.2" r="1"/>
+    <path d="M12 5.6 10 3.4M12 5.6l2-2.2"/></svg>Bug Garden<div class="sub">Tap a minibeast to learn about it</div></div><a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a></div>
+<div class="bubble" id="bubble"><h3 id="bTitle"></h3><p id="bText"></p><div><button class="sound" id="bRead">🔊 Read aloud</button><button class="close" id="bClose">✕</button></div></div>
+<div class="hint">Tap a bug or its button</div><div class="strip" id="strip"></div>
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script src="../assets/kid-lib.js"></script>
+<script src="../assets/models-lib.js"></script>
+<script type="importmap">{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+try {
+const DATA=[
+  {name:'Ladybug',kind:'ladybug',color:0xe83a3a,spot:0x111,y:0.3,scale:1.0,fact:'Ladybugs are tiny helpful beetles that eat garden pests like aphids.'},
+  {name:'Honeybee',kind:'honeybee',color:0xffb347,stripe:0x222,y:0.9,scale:1.0,fact:'Honeybees buzz from flower to flower and make honey. They help plants grow!'},
+  {name:'Butterfly',kind:'butterfly',color:0xff8c8f,wing:0xffa040,y:1.4,scale:1.0,fact:'A butterfly starts as a caterpillar, then becomes a chrysalis, then a butterfly.'},
+  {name:'Spider',kind:'spider',color:0x222,y:0.6,scale:1.0,fact:'Spiders are not insects. They have eight legs and spin webs of silk.'},
+  {name:'Ant',kind:'ant',color:0x4a3020,y:0.2,scale:1.0,fact:'Ants live in big family groups called colonies with hundreds or thousands of ants.'},
+  {name:'Caterpillar',kind:'caterpillar',color:0x5a9f3f,stripe:0x3a6a2a,y:0.3,scale:1.0,fact:'A caterpillar eats a lot and grows fast before turning into a butterfly or moth.'}
+];
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x5f9f3f);scene.fog=new THREE.Fog(0x5f9f3f,45,115);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,400);camera.position.set(0,7,24);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.98;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x4a9fd8, bottom: 0xdfefc8, sun: new THREE.Vector3(0.4, 0.5, -0.75), sunSize: 110 },
+  bloom: 'gentle'
+});
+window.fx = fx;/* HDR from Realism.setup provides the environment */KidLib.ambience('crickets');
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,1,0);controls.maxDistance=40;controls.minDistance=4;
+scene.add(new THREE.AmbientLight(0xeaffff,0.85));
+const sun=new THREE.DirectionalLight(0xfff5d0,1.6);sun.position.set(10,18,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xe8ffdc,0x3a5a2a,0.5));
+const ground=new THREE.Mesh(new THREE.CircleGeometry(22,48),new THREE.MeshStandardMaterial({color:0x4a8f2f,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+// flowers
+for(let i=0;i<14;i++){const g=new THREE.Group();const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.8,6),new THREE.MeshStandardMaterial({color:0x2f7f2f}));stem.position.y=0.4;g.add(stem);const h=new THREE.Mesh(new THREE.SphereGeometry(0.14,10,10),new THREE.MeshStandardMaterial({color:[0xff6f8f,0xffd166,0xc88fff,0xffffff][i%4]}));h.position.y=0.85;g.add(h);const a=Math.random()*Math.PI*2,r=3+Math.random()*14;g.position.set(Math.cos(a)*r,0,Math.sin(a)*r);scene.add(g);}
+// big mushroom
+for(let i=0;i<4;i++){const g=new THREE.Group();const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.2,0.8,10),new THREE.MeshStandardMaterial({color:0xe8e0d8}));stem.position.y=0.4;g.add(stem);const cap=new THREE.Mesh(new THREE.SphereGeometry(0.4,14,14),new THREE.MeshStandardMaterial({color:0xd84040}));cap.position.y=0.9;cap.scale.y=0.6;g.add(cap);g.position.set((Math.random()-0.5)*12,0,(Math.random()-0.5)*12);scene.add(g);}
+function build(a){
+  const b=ModelsLib.BUILDERS[a.kind];
+  if(!b){ return new THREE.Group(); }
+  const built=b(a);
+  built.group.scale.setScalar(a.scale||1);
+  return built;
+}
+const bugs=[];
+DATA.forEach((d,i)=>{const b=build(d);const g=b.group;g.position.set((Math.random()-0.5)*16,d.y,(Math.random()-0.5)*16);g.rotation.y=Math.random()*Math.PI*2;const lbl=KidLib.makeLabel(d.name,{scale:1.1});lbl.position.y=1.4;g.add(lbl);scene.add(g);bugs.push({data:d,group:g,anim:b.anim});});
+KidLib.pulse(scene, bugs[0].group.position);
+const strip=document.getElementById('strip');
+bugs.forEach((d,idx)=>{const b=document.createElement('button');b.className='btn';b.textContent=d.data.name;b.addEventListener('click',()=>showInfo(idx));strip.appendChild(b);});
+const bubble=document.getElementById('bubble'),bTitle=document.getElementById('bTitle'),bText=document.getElementById('bText');
+function showInfo(idx){const d=bugs[idx];bTitle.textContent=d.data.name;bText.textContent=d.data.fact;bubble.classList.add('show');document.querySelectorAll('.btn').forEach(x=>x.classList.remove('active'));strip.children[idx].classList.add('active');}
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown',e=>{pointer.x=(e.clientX/innerWidth)*2-1;pointer.y=-(e.clientY/innerHeight)*2+1;raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(scene.children,true);for(const h of hits){for(let i=0;i<bugs.length;i++){if(bugs[i].group.children.includes(h.object)){showInfo(i);return;}}}});
+const clock=new THREE.Clock();
+(function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();bugs.forEach((d,i)=>{ if(d.anim){ d.anim(t,i); } else { d.group.rotation.y+=0.01; } });controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera);})();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+} catch(err){document.getElementById('err').style.display='block';document.getElementById('err').textContent='Oops! Something went wrong: '+err.message;}
+</script>
+<script>
+const TIPS=['Minibeasts are small animals without backbones.','Many insects have six legs and three body parts.','Spiders have eight legs.','Bees help pollinate flowers.','Bugs are very important for nature.'];
+const QUIZ=[{q:'How many legs does a spider have?',opts:['Six','Eight','Ten'],ans:1},{q:'How many legs do insects have?',opts:['Six','Eight','Four'],ans:0},{q:'What does a caterpillar become?',opts:['A butterfly','A spider','A bee'],ans:0},{q:'Which bug makes honey?',opts:['Honeybee','Ladybug','Ant'],ans:0},{q:'Spiders spin webs made of?',opts:['Silk','Wool','Cotton'],ans:0}];
+window.__MORE={'Ladybug':['A ladybug can eat hundreds of aphids in a day.','A ladybug\'s spots help scare away predators.'],'Honeybee':['Bees dance to tell others where flowers are.','One bee makes only a tiny bit of honey.'],'Butterfly':['Butterflies taste with their feet.','Their wings are covered in tiny scales.'],'Spider':['Spider silk is stronger than steel of the same size.','Most spiders are harmless to people.'],'Ant':['Ants can lift many times their own weight.','They leave scent trails for other ants to follow.'],'Caterpillar':['A caterpillar can grow thousands of times bigger.','It molts, or sheds its skin, as it grows.' ]};
+KidLib.init({tips:TIPS,quiz:QUIZ});
+</script>
+</body>
+</html>

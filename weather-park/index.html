@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Weather Park — 3D Simulator</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif; overflow:hidden; background:#87bff0; color:#fff; }
+  #app { position:fixed; inset:0; }
+  .hud { position:fixed; top:0; left:0; right:0; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:10; }
+  .title { font-size:1.4rem; font-weight:700; text-shadow:0 2px 6px rgba(0,0,0,.4); }
+  .sub { font-size:.85rem; color:#e8f4ff; }
+  .back { pointer-events:auto; text-decoration:none; color:#fff; background:rgba(0,0,0,.28); border:2px solid rgba(255,255,255,.4); padding:8px 14px; border-radius:999px; font-size:.9rem; }
+  .back:hover { background:rgba(0,0,0,.45); }
+  .controls { position:fixed; bottom:86px; left:50%; transform:translateX(-50%); display:flex; gap:8px; flex-wrap:wrap; justify-content:center; z-index:15; }
+  .btn { padding:10px 16px; border-radius:999px; border:3px solid rgba(255,255,255,.55); cursor:pointer; background:rgba(255,255,255,.22); color:#fff; font-family:inherit; font-size:.95rem; font-weight:700; transition:transform .15s, background .15s; }
+  .btn:hover { transform:scale(1.08); background:rgba(255,255,255,.4); }
+  .btn.active { background:#ffd166; color:#3a2b00; border-color:#ffd166; }
+  .temp { position:fixed; top:16px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.35); border:2px solid rgba(255,255,255,.4); border-radius:999px; padding:6px 18px; font-size:1rem; font-weight:700; z-index:12; pointer-events:none; }
+  .bubble { position:fixed; left:50%; bottom:210px; transform:translateX(-50%); background:rgba(18,38,68,.94); border:3px solid rgba(255,255,255,.35); border-radius:22px; padding:14px 22px; max-width:min(90vw,420px); text-align:center; z-index:20; box-shadow:0 8px 32px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity .3s; }
+  .bubble.show { opacity:1; pointer-events:auto; }
+  .bubble h3 { font-size:1.25rem; margin-bottom:4px; }
+  .bubble p { font-size:1rem; line-height:1.45; }
+  .bubble .close { margin-top:8px; background:rgba(255,255,255,.25); color:#fff; border:none; border-radius:999px; padding:8px 14px; font-size:.95rem; cursor:pointer; font-family:inherit; }
+  .bubble .sound { margin-top:8px; background:#ffd166; color:#3a2b00; border:none; border-radius:999px; padding:8px 16px; font-size:.95rem; font-weight:700; cursor:pointer; font-family:inherit; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3.6"/>
+    <path d="M8 1.9v1.6M8 12.5v1.6M2.2 8h1.6M12.2 8h1.6M3.9 3.9l1.1 1.1M11 11l1.1 1.1M12.1 3.9 11 5"/>
+    <path d="M9.4 19.4a3.6 3.6 0 0 1 .3-7.1 4.6 4.6 0 0 1 8.8 1.3 2.9 2.9 0 0 1-.6 5.8Z"/></svg>Weather Park<div class="sub">Change the season · make it rain or snow</div></div>
+  <a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a>
+</div>
+<div class="temp" id="temp">🌡️ 18°C</div>
+<div class="bubble" id="bubble">
+  <h3 id="bTitle"></h3><p id="bText"></p>
+  <button class="sound" id="bRead">🔊 Read aloud</button>
+  <button class="close" id="bClose">Got it ✕</button>
+</div>
+<div class="controls" id="controls">
+  <button class="btn active" data-season="spring">🌸 Spring</button>
+  <button class="btn" data-season="summer">☀️ Summer</button>
+  <button class="btn" data-season="autumn">🍂 Autumn</button>
+  <button class="btn" data-season="winter">❄️ Winter</button>
+  <button class="btn" id="weatherBtn">🌧️ Make it rain</button>
+</div>
+
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script type="importmap">
+{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+<script src="../assets/kid-lib.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x87bff0); scene.fog=new THREE.Fog(0x87bff0, 30, 80);
+const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 400); camera.position.set(0,11,30);
+const renderer=new THREE.WebGLRenderer({ antialias:true }); renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.98;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x4a9fe0, bottom: 0xd8ecf7, sun: new THREE.Vector3(0.4, 0.5, -0.75), sunSize: 120 },
+  bloom: 'gentle'
+});
+window.fx = fx;
+/* HDR from Realism.setup provides the environment */
+KidLib.ambience('breeze');
+const controls=new OrbitControls(camera, renderer.domElement); controls.enableDamping=true; controls.target.set(0,2,0); controls.maxDistance=50; controls.minDistance=5;
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+const sunLight=new THREE.DirectionalLight(0xfff0c0, 1.5); sunLight.position.set(10,20,8); sunLight.castShadow=true; sunLight.shadow.mapSize.set(2048,2048); sunLight.shadow.camera.left=-25; sunLight.shadow.camera.right=25; sunLight.shadow.camera.top=25; sunLight.shadow.camera.bottom=-25; scene.add(sunLight);
+scene.add(new THREE.HemisphereLight(0xbfdfff, 0x5a7f3f, 0.4));
+
+const ground=new THREE.Mesh(new THREE.CircleGeometry(30,56), new THREE.MeshStandardMaterial({ color:0x4f8f38, roughness:1 })); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+// snow blanket overlay
+const snowBlanket=new THREE.Mesh(new THREE.CircleGeometry(30,56), new THREE.MeshStandardMaterial({ color:0xffffff, roughness:0.9, transparent:true, opacity:0 })); snowBlanket.rotation.x=-Math.PI/2; snowBlanket.position.y=0.02; scene.add(snowBlanket);
+
+// tree
+const tree=new THREE.Group(); const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.55,3,10), new THREE.MeshStandardMaterial({ color:0x5a3a22, roughness:0.95 })); trunk.position.y=1.5; trunk.castShadow=true; tree.add(trunk);
+const leaves=new THREE.Mesh(new THREE.SphereGeometry(1.9,24,24), new THREE.MeshStandardMaterial({ color:0x3f9f3f, roughness:0.9 })); leaves.position.y=4.0; leaves.castShadow=true; leaves.castShadow=true; tree.add(leaves); tree.userData.leaves=leaves;
+tree.position.set(0,0,3); scene.add(tree);
+KidLib.pulse(scene, new THREE.Vector3(0,4,3), 0xffd166);
+
+// flower patches (spring/summer)
+const flowers=[];
+(function(){ for(let n=0;n<40;n++){ const cols=[0xff6f8f,0xffd166,0xc88fff,0xffffff,0xff8f5f]; const f=new THREE.Group(); const stem=new THREE.Mesh(new THREE.CylinderGeometry(0.02,0.02,0.5,6), new THREE.MeshStandardMaterial({ color:0x2f7f2f })); stem.position.y=0.25; f.add(stem); const head=new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8), new THREE.MeshStandardMaterial({ color:cols[(Math.random()*5)|0] })); head.position.y=0.55; f.add(head); const a=Math.random()*Math.PI*2, r=4+Math.random()*18; f.position.set(Math.cos(a)*r,0,Math.sin(a)*r); f.visible=false; scene.add(f); flowers.push(f); } })();
+
+// butterflies
+const butterflies=[];
+(function(){ for(let n=0;n<6;n++){ const b=new THREE.Group(); const body=new THREE.Mesh(new THREE.SphereGeometry(0.06,8,8), new THREE.MeshStandardMaterial({ color:0x333333 })); b.add(body); const wingMat=new THREE.MeshStandardMaterial({ color:0xff9f3f, side:THREE.DoubleSide }); for(const s of [1,-1]){ const wing=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.2), wingMat); wing.position.x=s*0.18; wing.rotation.y=Math.PI/2; wing.rotation.z=s*Math.sin(0.4); b.add(wing); b.userData.wings=b.userData.wings||[]; b.userData.wings.push(wing); } b.position.set((Math.random()-0.5)*20, 2+Math.random()*3, (Math.random()-0.5)*20); b.visible=false; scene.add(b); butterflies.push(b); } })();
+
+// autumn leaf particles
+const leafCount=400, leafGeo=new THREE.BufferGeometry(); const leafPos=[]; for(let i=0;i<leafCount;i++) leafPos.push((Math.random()-0.5)*30, Math.random()*12, (Math.random()-0.5)*30);
+leafGeo.setAttribute('position', new THREE.Float32BufferAttribute(leafPos,3));
+const leafPts=new THREE.Points(leafGeo, new THREE.PointsMaterial({ color:0xd97a2f, size:0.12 })); leafPts.visible=false; scene.add(leafPts);
+
+// rain / snow
+const rainCount=900, rainGeo=new THREE.BufferGeometry(); const rainPos=[]; for(let i=0;i<rainCount;i++) rainPos.push((Math.random()-0.5)*30, Math.random()*16, (Math.random()-0.5)*30);
+rainGeo.setAttribute('position', new THREE.Float32BufferAttribute(rainPos,3));
+const rain=new THREE.Points(rainGeo, new THREE.PointsMaterial({ color:0x9fd0f0, size:0.08 })); rain.visible=false; scene.add(rain);
+const snowCount=600, snowGeo=new THREE.BufferGeometry(); const snowPos=[]; for(let i=0;i<snowCount;i++) snowPos.push((Math.random()-0.5)*30, Math.random()*16, (Math.random()-0.5)*30);
+snowGeo.setAttribute('position', new THREE.Float32BufferAttribute(snowPos,3));
+const snowPts=new THREE.Points(snowGeo, new THREE.PointsMaterial({ color:0xffffff, size:0.18 })); snowPts.visible=false; scene.add(snowPts);
+
+// clouds (soft puffs)
+const clouds=[];
+(function(){ for(let i=0;i<5;i++){ const c=new THREE.Group(); for(let k=0;k<5;k++){ const p=new THREE.Mesh(new THREE.SphereGeometry(0.8+Math.random()*0.6,14,14), new THREE.MeshStandardMaterial({ color:0xffffff, roughness:1 })); p.position.set(k*0.85-1.7, (Math.random()-0.5)*0.4, (Math.random()-0.5)*0.6); p.scale.y=0.6; c.add(p); } c.position.set(-16+i*8, 9, -8+Math.random()*6); scene.add(c); clouds.push(c); } })();
+
+const SEASONS={
+  spring:{ sky:0x87bff0, leaf:0x3f9f3f, leaf2:0x5fbf5f, ground:0x5f9f3f, temp:'16°C', label:'🌸 Spring', fact:'Spring is when flowers bloom and baby animals are born. The weather turns warmer!' },
+  summer:{ sky:0x4a9fe0, leaf:0x2f8f2f, leaf2:0x4fbf4f, ground:0x5f9f3f, temp:'26°C', label:'☀️ Summer', fact:'Summer is the warmest season — perfect for swimming and playing outside in the sun!' },
+  autumn:{ sky:0x8f9f6f, leaf:0xd97a2f, leaf2:0xc05a2a, ground:0x7f7f3f, temp:'12°C', label:'🍂 Autumn', fact:'In autumn, leaves change to orange and red, then fall off the trees.' },
+  winter:{ sky:0xbfd0e0, leaf:null, leaf2:null, ground:0xe8ecef, temp:'1°C', label:'❄️ Winter', fact:'Winter is the coldest season. The tree is bare, and snow may cover the ground!' },
+};
+let current='spring', weather=false;
+
+function applySeason(s, silent){
+  const cfg=SEASONS[s]; current=s;
+  scene.background.setHex(cfg.sky); scene.fog.color.setHex(cfg.sky);
+  ground.material.color.setHex(cfg.ground);
+  if(cfg.leaf){ leaves.material.color.setHex(cfg.leaf); leaves.visible=true; } else leaves.visible=false;
+  // snow blanket
+  snowBlanket.material.opacity = (s==='winter') ? 1 : 0;
+  flowers.forEach(f=>f.visible = (s==='spring'||s==='summer'));
+  butterflies.forEach(b=>b.visible = (s==='spring'||s==='summer'));
+  leafPts.visible = (s==='autumn');
+  if(s!=='winter'){ rain.visible=false; snowPts.visible=false; }
+  if(s==='winter' && weather){ snowPts.visible=weather; } else if(s!=='winter' && weather){ rain.visible=weather; }
+  document.getElementById('temp').textContent = '🌡️ '+cfg.temp;
+  document.querySelectorAll('.btn[data-season]').forEach(b=>b.classList.toggle('active', b.dataset.season===s));
+  document.getElementById('weatherBtn').textContent = (s==='winter') ? '❄️ Make it snow' : '🌧️ Make it rain';
+  if(!silent) showBubble(cfg.label, cfg.fact);
+}
+function toggleWeather(){
+  weather=!weather; const btn=document.getElementById('weatherBtn');
+  if(current==='winter'){ snowPts.visible=weather; rain.visible=false; btn.textContent=weather?'⏹️ Stop the snow':'❄️ Make it snow'; showBubble(weather?'❄️ Snowing!':'❄️ Winter', weather?'Snow is made of billions of tiny ice crystals falling from the clouds.': 'The snow stopped. Brrr, it is still cold!'); }
+  else { rain.visible=weather; snowPts.visible=false; btn.textContent=weather?'⏹️ Stop the rain':'🌧️ Make it rain'; showBubble(weather?'🌧️ Raining!':'☀️ Weather Park', weather?'Rain is water drops that fall from clouds. Plants love a good drink of rain!':'The rain stopped. The sun is out again!'); }
+}
+document.querySelectorAll('.btn[data-season]').forEach(b=>b.onclick=()=>applySeason(b.dataset.season));
+document.getElementById('weatherBtn').onclick=toggleWeather;
+
+const bubble=document.getElementById('bubble'), bTitle=document.getElementById('bTitle'), bText=document.getElementById('bText');
+function showBubble(t,txt){ bTitle.textContent=t; bText.textContent=txt; bubble.classList.add('show'); }
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+
+const clock=new THREE.Clock();
+(function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime();
+  clouds.forEach((c,i)=>{ c.position.x = -16 + ((t*1.2 + i*8) % 32); });
+  tree.rotation.z=Math.sin(t*0.7)*0.02;
+  // rain
+  const rp=rain.geometry.attributes.position.array; for(let i=1;i<rp.length;i+=3){ rp[i]-=0.18; if(rp[i]<0) rp[i]=16; } rain.geometry.attributes.position.needsUpdate=true;
+  // snow
+  const sp=snowPts.geometry.attributes.position.array; for(let i=0;i<sp.length;i+=3){ sp[i+1]-=0.025; sp[i]+=Math.sin(t+i)*0.006; if(sp[i+1]<0) sp[i+1]=16; } snowPts.geometry.attributes.position.needsUpdate=true;
+  // leaves
+  const lp=leafPts.geometry.attributes.position.array; for(let i=0;i<lp.length;i+=3){ lp[i+1]-=0.03; lp[i]+=Math.sin(t*2+i)*0.01; if(lp[i+1]<0){ lp[i+1]=12; lp[i]=(Math.random()-0.5)*30; } } leafPts.geometry.attributes.position.needsUpdate=true;
+  // butterflies
+  butterflies.forEach((b,i)=>{ b.position.y=2+Math.sin(t*2+i)*0.6; b.rotation.y=t*0.8+i; (b.userData.wings||[]).forEach((w,wi)=>{ w.rotation.z=Math.sin(t*20+i)*0.5*(wi?1:-1); }); });
+  controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera); })();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+applySeason('spring', true);
+const TIPS=[
+  'Weather tells us what the air outside is doing right now.',
+  'Climate is the usual weather over many years.',
+  'Rain falls from clouds when water drops get heavy.',
+  'Snowflakes are crystals of ice — no two look alike.',
+  'The Sun is what warms our planet.'
+];
+const QUIZ=[
+  {q:'Which season is the warmest?', opts:['Winter','Summer','Autumn'], ans:1},
+  {q:'What falls from clouds when it rains?', opts:['Snow','Water drops','Wind'], ans:1},
+  {q:'At what temperature does water freeze?', opts:['10°C','0°C','100°C'], ans:1},
+  {q:'Which season has falling leaves?', opts:['Autumn','Spring','Summer'], ans:0},
+  {q:'A snowflake is made of what?', opts:['Ice','Sand','Cotton'], ans:0}
+];
+window.__MORE={
+  '🌸 Spring':['Daylight grows longer in spring.','Many animals come out of hibernation in spring.'],
+  '☀️ Summer':['The longest day of the year happens in summer.','Summer storms often bring thunder and lightning.'],
+  '🍂 Autumn':['Leaves stop making food, so they change color.','Animals like squirrels gather food to store for winter.'],
+  '❄️ Winter':['Water freezes into ice at 0°C.','Some animals grow thicker fur for winter.']
+};
+KidLib.init({tips:TIPS, quiz:QUIZ});
+</script>
+</body>
+</html>

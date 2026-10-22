@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Water Cycle — 3D Simulator</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif;overflow:hidden;background:#6fb0e8;color:#fff}
+  #app{position:fixed;inset:0}
+  #err{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#5a1020;border:3px solid #ff8f8f;padding:18px 24px;border-radius:14px;color:#ffd2d2;font-size:1rem;display:none;z-index:50;max-width:90vw}
+  .hud{position:fixed;top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:10}
+  .title{font-size:1.4rem;font-weight:700;text-shadow:0 2px 6px rgba(0,0,0,.45)}
+  .sub{font-size:.85rem;color:#e0f0ff}
+  .back{pointer-events:auto;text-decoration:none;color:#fff;background:rgba(0,0,0,.28);border:2px solid rgba(255,255,255,.45);padding:8px 14px;border-radius:999px;font-size:.9rem}
+  .back:hover{background:rgba(0,0,0,.45)}
+  .bubble{position:fixed;left:50%;bottom:210px;transform:translateX(-50%);background:rgba(10,30,60,.96);border:3px solid rgba(120,200,255,.5);border-radius:24px;padding:18px 24px;max-width:min(90vw,440px);text-align:center;z-index:20;box-shadow:0 12px 40px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:opacity .3s}
+  .bubble.show{opacity:1;pointer-events:auto}
+  .bubble h3{font-size:1.35rem;margin-bottom:6px;color:#d8f0ff}
+  .bubble p{font-size:1.05rem;line-height:1.5}
+  .bubble .sound{margin-top:10px;background:#6fb0e8;color:#062032;border:none;border-radius:999px;padding:10px 18px;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit}
+  .bubble .close{margin-left:8px;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:999px;padding:10px 16px;font-size:1rem;cursor:pointer;font-family:inherit}
+  .strip{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:15;flex-wrap:wrap;justify-content:center}
+  .btn{padding:8px 14px;border-radius:999px;border:3px solid rgba(255,255,255,.4);cursor:pointer;background:rgba(10,40,80,.75);color:#fff;font-family:inherit;font-size:.9rem;font-weight:700;transition:transform .15s,border-color .15s}
+  .btn:hover{transform:scale(1.08);border-color:#fff}
+  .btn.active{border-color:#ffd166;box-shadow:0 0 12px rgba(255,209,102,.6)}
+  .hint{position:fixed;bottom:142px;left:50%;transform:translateX(-50%);color:#e0f0ff;font-size:.85rem;text-align:center;z-index:12;pointer-events:none;text-shadow:0 1px 5px rgba(0,0,0,.45)}
+</style>
+</head>
+<body>
+<div id="app"></div><div id="err"></div>
+<div class="hud"><div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5S5.5 9.6 5.5 14a6.5 6.5 0 0 0 13 0c0-4.4-6.5-11.5-6.5-11.5Z"/>
+    <path d="M8.6 15.4a3.4 3.4 0 0 0 2.6 2.4" opacity=".6"/>
+    <path d="M19 8.5a7 7 0 0 1 1 3.6M5 12a7 7 0 0 1 1.4-4" opacity=".65"/></svg>Water Cycle<div class="sub">Tap the parts of the water cycle to learn</div></div><a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a></div>
+<div class="bubble" id="bubble"><h3 id="bTitle"></h3><p id="bText"></p><div><button class="sound" id="bRead">🔊 Read aloud</button><button class="close" id="bClose">✕</button></div></div>
+<div class="hint">Tap a part of the cycle or its button</div><div class="strip" id="strip"></div>
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script src="../assets/kid-lib.js"></script>
+<script type="importmap">{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+try {
+const DATA=[
+  {name:'Sun',color:0xffd166,y:8,fact:'The Sun warms the water and gives it energy to rise into the air.'},
+  {name:'Evaporation',color:0x88ccff,y:5,fact:'Evaporation is when heat turns water into a gas called water vapor, which rises up.'},
+  {name:'Clouds',color:0xffffff,y:8,fact:'Cool air turns water vapor into tiny droplets, making clouds.'},
+  {name:'Rain',color:0x66aaff,y:3.5,fact:'When cloud droplets get big and heavy, they fall back down as rain.'},
+  {name:'River',color:0x3a7fc0,y:0.8,fact:'Rainwater flows into rivers, and rivers carry water back to the sea.'},
+  {name:'Ocean',color:0x2a5f9f,y:0.5,fact:'The ocean holds most of Earth\'s water. The cycle starts again from here.'}
+];
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x6fb0e8);scene.fog=new THREE.Fog(0x6fb0e8,50,130);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,400);camera.position.set(0,9,30);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.98;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x3f8fd8, bottom: 0xd8eef8, sun: new THREE.Vector3(0.5, 0.45, -0.75), sunSize: 130 },
+  bloom: 'gentle'
+});
+window.fx = fx;/* HDR from Realism.setup provides the environment */KidLib.ambience('breeze');
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,3,0);controls.maxDistance=50;controls.minDistance=5;
+scene.add(new THREE.AmbientLight(0xffffff,0.85));
+const sun=new THREE.DirectionalLight(0xfff8e0,1.6);sun.position.set(12,20,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xd8f0ff,0x3a5f7f,0.5));
+const ground=new THREE.Mesh(new THREE.CircleGeometry(26,56),new THREE.MeshStandardMaterial({color:0x4a8a5a,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+// ocean
+const ocean=new THREE.Mesh(new THREE.CircleGeometry(10,48),new THREE.MeshStandardMaterial({color:0x2a5f9f,roughness:0.3,metalness:0.2}));ocean.rotation.x=-Math.PI/2;ocean.position.set(0,0.06,-8);scene.add(ocean);
+// river strip
+(function(){const r=new THREE.Mesh(new THREE.PlaneGeometry(2.5,16),new THREE.MeshStandardMaterial({color:0x3a7fc0,roughness:0.4}));r.rotation.x=-Math.PI/2;r.position.set(0,0.07,-1);scene.add(r);})();
+// mountain
+(function(){const m=new THREE.Mesh(new THREE.ConeGeometry(3,5,8),new THREE.MeshStandardMaterial({color:0x6a6a6a,roughness:0.9,flatShading:true}));m.position.set(8,2.5,2);m.castShadow=true;scene.add(m);const snow=new THREE.Mesh(new THREE.ConeGeometry(1.2,1.5,8),new THREE.MeshStandardMaterial({color:0xffffff}));snow.position.set(8,4.8,2);scene.add(snow);})();
+// clouds
+const clouds=[];
+for(let i=0;i<3;i++){const c=new THREE.Group();for(let k=0;k<5;k++){const p=new THREE.Mesh(new THREE.SphereGeometry(0.8+Math.random()*0.5,12,12),new THREE.MeshStandardMaterial({color:0xffffff,roughness:1}));p.position.set(k*0.9-1.8,(Math.random()-0.5)*0.4,(Math.random()-0.5)*0.5);p.scale.y=0.6;c.add(p);}c.position.set(-8+i*8,8,-4);scene.add(c);clouds.push(c);}
+// rain particles (when active)
+const rg=new THREE.BufferGeometry();const rp=[];for(let i=0;i<400;i++)rp.push(0,0,0);rg.setAttribute('position',new THREE.Float32BufferAttribute(rp,3));
+const rain=new THREE.Points(rg,new THREE.PointsMaterial({color:0x88ccff,size:0.1}));rain.visible=false;scene.add(rain);
+function build(d){
+  const g=new THREE.Group();const mat=new THREE.MeshStandardMaterial({color:d.color,roughness:0.7});const name=d.name;
+  if(name==='Sun'){const s=new THREE.Mesh(new THREE.SphereGeometry(1.6,24,24),new THREE.MeshBasicMaterial({color:0xffd166}));g.add(s);const glow=new THREE.Mesh(new THREE.SphereGeometry(2.2,24,24),new THREE.MeshBasicMaterial({color:0xffe88a,transparent:true,opacity:0.35}));g.add(glow);}
+  else if(name==='Evaporation'){for(let k=0;k<5;k++){const p=new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8),new THREE.MeshStandardMaterial({color:0x88ccff,transparent:true,opacity:0.7}));p.position.set((k-2)*0.3,0.4+k*0.4,0);g.add(p);}}
+  else if(name==='Clouds'){for(let k=0;k<5;k++){const p=new THREE.Mesh(new THREE.SphereGeometry(0.7,12,12),mat);p.position.set(k*0.9-1.8,(Math.random()-0.5)*0.4,0);p.scale.y=0.6;g.add(p);}}
+  else if(name==='Rain'){for(let k=0;k<12;k++){const p=new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.6,6),new THREE.MeshStandardMaterial({color:0x66aaff,transparent:true,opacity:0.7}));p.position.set((k%4-1.5)*0.6,0.5-(k/4)*0.8,(Math.floor(k/4)-1)*0.8);g.add(p);}}
+  else if(name==='River'){const r=new THREE.Mesh(new THREE.PlaneGeometry(2,10),new THREE.MeshStandardMaterial({color:0x3a7fc0,roughness:0.4}));r.rotation.x=-Math.PI/2;r.position.y=0.3;g.add(r);}
+  else{const r=new THREE.Mesh(new THREE.CircleGeometry(5,40),new THREE.MeshStandardMaterial({color:0x2a5f9f,roughness:0.3}));r.rotation.x=-Math.PI/2;r.position.y=0.3;g.add(r);const w=new THREE.Mesh(new THREE.CircleGeometry(5,40),new THREE.MeshStandardMaterial({color:0xdff2ff,transparent:true,opacity:0.3}));w.rotation.x=-Math.PI/2;w.position.y=0.36;g.add(w);}
+  return g;
+}
+const parts=[];
+DATA.forEach((d,i)=>{const g=build(d);g.position.set((i-2.5)*4.5,d.y,0);const lbl=KidLib.makeLabel(d.name,{scale:1.2});lbl.position.y=(d.name==='Ocean'?1.3:1.6);g.add(lbl);scene.add(g);parts.push({data:d,group:g});});
+KidLib.pulse(scene, parts[0].group.position);
+const strip=document.getElementById('strip');
+parts.forEach((d,idx)=>{const b=document.createElement('button');b.className='btn';b.textContent=d.data.name;b.addEventListener('click',()=>showInfo(idx));strip.appendChild(b);});
+const bubble=document.getElementById('bubble'),bTitle=document.getElementById('bTitle'),bText=document.getElementById('bText');
+function showInfo(idx){const d=parts[idx];bTitle.textContent=d.data.name;bText.textContent=d.data.fact;bubble.classList.add('show');document.querySelectorAll('.btn').forEach(x=>x.classList.remove('active'));strip.children[idx].classList.add('active');}
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown',e=>{pointer.x=(e.clientX/innerWidth)*2-1;pointer.y=-(e.clientY/innerHeight)*2+1;raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(scene.children,true);for(const h of hits){for(let i=0;i<parts.length;i++){if(parts[i].group.children.includes(h.object)){showInfo(i);return;}}}});
+const clock=new THREE.Clock();
+(function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();
+  clouds.forEach((c,i)=>{c.position.x=-8+((t*0.8+i*8)%16);});
+  const ra=rain.geometry.attributes.position.array;const rpN=ra.length/3;for(let i=0;i<rpN;i++){if(rain.visible){if(ra[i*3+1]<-0.5){ra[i*3]=(Math.random()-0.5)*8;ra[i*3+1]=4;ra[i*3+2]=(Math.random()-0.5)*6;}ra[i*3+1]-=0.15;}else{ra[i*3]=-5;}}rain.geometry.attributes.position.needsUpdate=true;
+  parts.forEach(d=>d.group.rotation.y=Math.sin(t*0.3+d.data.y)*0.08);
+  controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera);})();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+// auto-show rain after a while
+setTimeout(()=>{rain.visible=true;},4000);
+} catch(err){document.getElementById('err').style.display='block';document.getElementById('err').textContent='Oops! Something went wrong: '+err.message;}
+</script>
+<script>
+const TIPS=['Water moves in a never-ending cycle.','The same water has been around for millions of years.','Evaporation turns water into vapor.','Condensation makes clouds.','Precipitation brings water back down as rain or snow.'];
+const QUIZ=[{q:'What turns water into vapor?',opts:['Sun\'s heat','Wind','Clouds'],ans:0},{q:'What are clouds made of?',opts:['Tiny water drops','Smoke','Cotton'],ans:0},{q:'When droplets get heavy they fall as?',opts:['Rain','Wind','Light'],ans:0},{q:'Where do rivers carry water?',opts:['To the sea','To the sky','Underground'],ans:0},{q:'The water cycle is?',opts:['Never-ending','Once a year','Stops at night'],ans:0}];
+window.__MORE={'Sun':['The Sun is a star 150 million kilometers away.','Its heat is the engine of the water cycle.'],'Evaporation':['Water can evaporate from oceans, lakes, and wet ground.','Salt stays behind when sea water evaporates.'],'Clouds':['Clouds can be white, gray, or dark.','Dark clouds often mean rain is on the way.'],'Rain':['Rain falls from clouds as droplets.','Rain gives plants and animals fresh water.'],'River':['Rivers are always flowing downhill.','They are home to many fish and animals.'],'Ocean':['Oceans cover most of Earth.','Ocean water is salty; river water is fresh.' ]};
+KidLib.init({tips:TIPS,quiz:QUIZ});
+</script>
+</body>
+</html>

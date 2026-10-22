@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dino Park — 3D Simulator</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif; overflow:hidden; background:#14231a; color:#fff; }
+  #app { position:fixed; inset:0; }
+  .hud { position:fixed; top:0; left:0; right:0; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:10; }
+  .title { font-size:1.4rem; font-weight:700; text-shadow:0 2px 8px rgba(0,0,0,.8); }
+  .sub { font-size:.85rem; color:#b8d8a0; }
+  .back { pointer-events:auto; text-decoration:none; color:#fff; background:rgba(255,255,255,.14); border:2px solid rgba(255,255,255,.32); padding:8px 14px; border-radius:999px; font-size:.9rem; }
+  .back:hover { background:rgba(255,255,255,.3); }
+  .bubble { position:fixed; left:50%; bottom:210px; transform:translateX(-50%); background:rgba(20,32,16,.96); border:3px solid rgba(150,220,110,.45); border-radius:24px; padding:18px 24px; max-width:min(90vw,440px); text-align:center; z-index:20; box-shadow:0 10px 36px rgba(0,0,0,.7); opacity:0; pointer-events:none; transition:opacity .3s; }
+  .bubble.show { opacity:1; pointer-events:auto; }
+  .bubble h3 { font-size:1.35rem; margin-bottom:4px; color:#d8f0c0; }
+  .bubble p { font-size:1.05rem; line-height:1.5; }
+  .bubble .tag { display:inline-block; margin:8px 0 2px; padding:4px 14px; border-radius:999px; font-size:.85rem; font-weight:700; }
+  .tag.herb { background:#5aa85a; }
+  .tag.carn { background:#c05a4a; }
+  .bubble .sound { margin-top:8px; background:#9fce6a; color:#1d2a0e; border:none; border-radius:999px; padding:10px 18px; font-size:1rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .bubble .close { margin-left:8px; background:rgba(255,255,255,.16); color:#fff; border:none; border-radius:999px; padding:10px 16px; font-size:1rem; cursor:pointer; font-family:inherit; }
+  .strip { position:fixed; bottom:86px; left:50%; transform:translateX(-50%); display:flex; gap:8px; z-index:15; flex-wrap:wrap; justify-content:center; }
+  .dino-btn { padding:8px 12px; border-radius:999px; border:3px solid rgba(255,255,255,.35); cursor:pointer; background:rgba(26,40,20,.8); color:#fff; font-family:inherit; font-size:.85rem; font-weight:700; transition:transform .15s, border-color .15s; }
+  .dino-btn:hover { transform:scale(1.08); border-color:#fff; }
+  .dino-btn.active { border-color:#9fce6a; box-shadow:0 0 12px rgba(159,206,106,.6); }
+  .hint { position:fixed; bottom:72px; left:50%; transform:translateX(-50%); color:#b8d8a0; font-size:.85rem; text-align:center; z-index:12; pointer-events:none; text-shadow:0 1px 5px #000; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.5c0-4.4 3.6-8 8-8h2.2c1.3 0 2.4 1.1 2.4 2.4 0 1-.6 1.8-1.5 2.2l1.6 1.9H14l-1-1.6"/>
+    <path d="M3 17.5h3.4l1.2-1.9"/>
+    <path d="M9.2 17.6 8.6 21M12.2 17.7l-.5 3.3"/>
+    <circle cx="12.4" cy="10" r=".9"/>
+    <path d="M3 13.8C2 12.9 2 11.6 2.5 10.6"/></svg>Dino Park<div class="sub">Drag to look around · tap a dinosaur to learn</div></div>
+  <a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a>
+</div>
+<div class="bubble" id="bubble">
+  <h3 id="bTitle"></h3><span class="tag" id="bTag"></span><p id="bText"></p>
+  <div><button class="sound" id="bRead">🔊 Read aloud</button><button class="close" id="bClose">✕</button></div>
+</div>
+<div class="hint">Tap a dinosaur or its button</div>
+<div class="strip" id="strip"></div>
+
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script type="importmap">
+{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+<script src="../assets/kid-lib.js"></script>
+<script src="../assets/models-lib.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+
+const DATA=[
+  { name:'T-Rex', color:0x5f7f4f, diet:'carn', scale:1.7, kind:'trex', labelY:5.0, fact:'T-Rex had teeth as long as a banana and could run fast for its size.' },
+  { name:'Triceratops', color:0x8f7f4f, diet:'herb', scale:1.55, kind:'trike', labelY:3.6, fact:'Triceratops had three horns on its face and a big frill on its neck.' },
+  { name:'Brachiosaurus', color:0x4f7f6f, diet:'herb', scale:1.7, kind:'brach', labelY:8.0, fact:'Brachiosaurus had a super long neck to munch leaves at the very top of trees.' },
+  { name:'Stegosaurus', color:0x6f9f8f, diet:'herb', scale:1.45, kind:'stego', labelY:4.2, fact:'Stegosaurus had plates on its back and spikes on its tail for defense.' },
+  { name:'Velociraptor', color:0x8f6f4f, diet:'carn', scale:1.0, kind:'raptor', labelY:3.0, fact:'Velociraptor was a small, fast hunter with a big curved claw on each foot.' },
+  { name:'Pterodactyl', color:0x5f6f9f, diet:'carn', scale:1.2, kind:'ptero', flying:true, labelY:2.6, fact:'Pterodactyl was a flying reptile — it was not a dinosaur, but a close cousin!' },
+];
+
+// terrain texture
+const terrainTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=512; const g=c.getContext('2d'); g.fillStyle='#2f4a28'; g.fillRect(0,0,512,512); for(let i=0;i<1800;i++){ g.fillStyle='rgba(20,40,15,'+(0.1+Math.random()*0.25)+')'; g.beginPath(); g.arc(Math.random()*512,Math.random()*512,2+Math.random()*7,0,7); g.fill(); } for(let i=0;i<900;i++){ g.fillStyle='rgba(90,140,60,'+(0.05+Math.random()*0.15)+')'; g.beginPath(); g.arc(Math.random()*512,Math.random()*512,1+Math.random()*3,0,7); g.fill(); } const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(4,4); return t; })();
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x9fc8d8); // hazy sky
+scene.fog=new THREE.Fog(0x9fc8d8, 60, 150);
+const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 400);
+camera.position.set(0,12,48);
+const renderer=new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.95;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x2f7fd0, bottom: 0xd8ecf7, sun: new THREE.Vector3(0.35, 0.5, -0.8), sunSize: 110 },
+  bloom: 'gentle'
+});
+window.fx = fx;
+/* HDR from Realism.setup provides the environment */
+KidLib.ambience('wind');
+const controls=new OrbitControls(camera, renderer.domElement);
+controls.enableDamping=true; controls.target.set(0,2.5,0); controls.maxDistance=70; controls.minDistance=6;
+
+scene.add(new THREE.AmbientLight(0x88b088, 0.7));
+const sun=new THREE.DirectionalLight(0xfff0c0, 1.6); sun.position.set(10,24,10); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-30; sun.shadow.camera.right=30; sun.shadow.camera.top=30; sun.shadow.camera.bottom=-30; scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xbfd8c0, 0x2f4a28, 0.4));
+
+const ground=new THREE.Mesh(new THREE.CircleGeometry(60,64), new THREE.MeshStandardMaterial({ map:terrainTex, roughness:1 })); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+// drifting spores / warm haze
+(function(){ const sp=new THREE.BufferGeometry(); const pos=[]; for(let i=0;i<240;i++) pos.push((Math.random()-0.5)*70, 1+Math.random()*9, (Math.random()-0.5)*70); sp.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); scene.add(new THREE.Points(sp, new THREE.PointsMaterial({ color:0xffe8a0, size:0.14, transparent:true, opacity:0.35 }))); })();
+
+// distant mountains
+(function(){ for(let n=0;n<9;n++){ const a=n/9*Math.PI*2; const m=new THREE.Mesh(new THREE.ConeGeometry(8+Math.random()*10, 18+Math.random()*14, 5), new THREE.MeshStandardMaterial({ color:0x5f7f6f, roughness:1, flatShading:true })); m.position.set(Math.cos(a)*78, 4, Math.sin(a)*78); m.rotation.z=Math.PI/12*(Math.random()-0.5); scene.add(m); } })();
+
+// trees
+(function(){ for(let n=0;n<30;n++){ const g=new THREE.Group(); const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.25,0.4,2.5,8), new THREE.MeshStandardMaterial({ color:0x5a3a22, roughness:0.9 })); trunk.position.y=1.25; trunk.castShadow=true; g.add(trunk); const top=new THREE.Mesh(new THREE.ConeGeometry(1.5,3.5,9), new THREE.MeshStandardMaterial({ color:0x2f6f2f, roughness:0.9 })); top.position.y=3.6; top.castShadow=true; g.add(top); g.position.set((Math.random()-0.5)*55, 0, (Math.random()-0.5)*55); const r2=g.position.x*g.position.x+g.position.z*g.position.z; if(r2<520){ const s2=Math.sqrt(520/Math.max(r2,1)); g.position.x*=s2; g.position.z*=s2; } scene.add(g); } })();
+
+function buildDino(d){
+  const builder=ModelsLib.BUILDERS[d.kind];
+  if(!builder){ return {group:new THREE.Group(), anim:null}; }
+  return builder(d);
+}
+
+function findDinoRoot(obj){
+  let o=obj;
+  while(o){
+    for(let i=0;i<dinos.length;i++){ if(dinos[i].group===o) return i; }
+    o=o.parent;
+  }
+  return -1;
+}
+
+const dinos=[];
+DATA.forEach((d,i)=>{ const built=buildDino(d); const g=built.group; g.scale.setScalar(d.scale); const angle=(i/DATA.length)*Math.PI*2; g.position.set(Math.cos(angle)*15, 0, Math.sin(angle)*12); g.rotation.y=-angle+Math.PI; const lbl=KidLib.makeLabel(d.name,{scale:1.3}); lbl.position.y=d.labelY; g.add(lbl); scene.add(g); dinos.push({ data:d, group:g, anim:built.anim||null }); });
+
+KidLib.pulse(scene, dinos[0].group.position, 0x9fce6a);
+const strip=document.getElementById('strip');
+dinos.forEach((d,idx)=>{ const b=document.createElement('button'); b.className='dino-btn'; b.textContent=d.data.name; b.addEventListener('click',()=>showInfo(idx)); strip.appendChild(b); });
+const bubble=document.getElementById('bubble'), bTitle=document.getElementById('bTitle'), bText=document.getElementById('bText'), bTag=document.getElementById('bTag');
+function showInfo(idx){ const d=dinos[idx]; bTitle.textContent=d.data.name; bText.textContent=d.data.fact; bTag.textContent=d.data.diet==='carn'?'🥩 Meat eater':'🌿 Plant eater'; bTag.className='tag '+d.data.diet; bubble.classList.add('show'); document.querySelectorAll('.dino-btn').forEach(x=>x.classList.remove('active')); strip.children[idx].classList.add('active'); }
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bTag.textContent}. ${bText.textContent}`);
+
+const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown',e=>{ pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=-(e.clientY/innerHeight)*2+1; raycaster.setFromCamera(pointer,camera); const hits=raycaster.intersectObjects(scene.children,true); for(const h of hits){ const i=findDinoRoot(h.object); if(i>=0){ showInfo(i); return; } } });
+
+const clock=new THREE.Clock();
+(function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime();
+  dinos.forEach((d,i)=>{ if(d.anim){ d.anim(t,i); } else { d.group.rotation.y+=0.002; } });
+  controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera); })();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+const TIPS=[
+  'Dinosaurs lived millions of years ago — long before people.',
+  'Some dinosaurs ate plants and some ate meat.',
+  'Most dinosaurs died out, but birds are their living relatives.',
+  'The word dinosaur means "terrible lizard".',
+  'Paleontologists are the scientists who study dinosaur bones.'
+];
+const QUIZ=[
+  {q:'Which dinosaur had three horns?', opts:['Triceratops','T-Rex','Stegosaurus'], ans:0},
+  {q:'Which of these ate mostly plants?', opts:['T-Rex','Brachiosaurus','Velociraptor'], ans:1},
+  {q:'Which dinosaur had plates on its back?', opts:['Stegosaurus','Triceratops','Pterodactyl'], ans:0},
+  {q:'Was a pterodactyl a dinosaur?', opts:['Yes','No, a flying reptile','Maybe'], ans:1},
+  {q:'What are birds related to?', opts:['Fish','Dinosaurs','Insects'], ans:1}
+];
+window.__MORE={
+  'T-Rex':['T-Rex walked on two strong legs.','Its arms were small, but its jaws were huge.'],
+  'Triceratops':['Triceratops used its horns to defend against predators.','It ate plants with a beak-like mouth.'],
+  'Brachiosaurus':['Brachiosaurus belonged to a group called sauropods.','It probably ate hundreds of kilograms of leaves every day.'],
+  'Stegosaurus':['Stegosaurus had a brain about the size of a walnut.','Its spiked tail could really hurt a predator.'],
+  'Velociraptor':['Velociraptor was about the size of a turkey.','Scientists think it had feathers.'],
+  'Pterodactyl':['Pterodactyl wings were made of skin.','It flew in the air and also walked on four legs on the ground.']
+};
+KidLib.init({tips:TIPS, quiz:QUIZ});
+</script>
+</body>
+</html>

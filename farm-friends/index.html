@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Farm Friends — 3D Simulator</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif; overflow:hidden; background:#5f9f3f; color:#fff; }
+  #app { position:fixed; inset:0; }
+  .hud { position:fixed; top:0; left:0; right:0; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; z-index:10; }
+  .title { font-size:1.4rem; font-weight:700; text-shadow:0 2px 6px rgba(0,0,0,.45); }
+  .sub { font-size:.85rem; color:#eaffd6; }
+  .back { pointer-events:auto; text-decoration:none; color:#fff; background:rgba(0,0,0,.28); border:2px solid rgba(255,255,255,.4); padding:8px 14px; border-radius:999px; font-size:.9rem; }
+  .back:hover { background:rgba(0,0,0,.45); }
+  .panel { position:fixed; right:16px; top:70px; background:rgba(0,0,0,.4); border:2px solid rgba(255,255,255,.3); border-radius:18px; padding:14px 16px; z-index:15; width:210px; }
+  .panel h3 { font-size:1rem; margin-bottom:8px; }
+  .panel .egg-count { font-size:1.6rem; font-weight:700; color:#ffe08a; }
+  .panel .prompt { font-size:.85rem; color:#eaffd6; margin-top:6px; line-height:1.4; }
+  .panel .ok { margin-top:10px; width:100%; background:#ffe08a; color:#3a2b00; border:none; border-radius:999px; padding:10px; font-size:1rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .panel .ok:disabled { opacity:.5; cursor:default; }
+  .bubble { position:fixed; left:50%; bottom:210px; transform:translateX(-50%); background:rgba(35,55,18,.96); border:3px solid rgba(255,255,255,.35); border-radius:24px; padding:16px 22px; max-width:min(90vw,400px); text-align:center; z-index:20; box-shadow:0 10px 34px rgba(0,0,0,.5); opacity:0; pointer-events:none; transition:opacity .3s; }
+  .bubble.show { opacity:1; pointer-events:auto; }
+  .bubble h3 { font-size:1.25rem; margin-bottom:4px; }
+  .bubble p { font-size:1rem; line-height:1.45; }
+  .bubble .sound { margin-top:8px; background:#eaffd6; color:#2a4a10; border:none; border-radius:999px; padding:9px 16px; font-size:.95rem; font-weight:700; cursor:pointer; font-family:inherit; }
+  .bubble .close { margin-left:8px; background:rgba(255,255,255,.2); color:#fff; border:none; border-radius:999px; padding:9px 14px; font-size:.95rem; cursor:pointer; font-family:inherit; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="hud">
+  <div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 10.5 12 3.5l9.5 7"/>
+    <path d="M4.5 10.5V21h15V10.5"/>
+    <path d="M9 21v-6.5h6V21"/>
+    <path d="M12 14.5v6.5M9 17.5h6" opacity=".6"/></svg>Farm Friends<div class="sub">Tap animals · then count the eggs in the barn</div></div>
+  <a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a>
+</div>
+<div class="panel">
+  <h3>🥚 Egg Counting Game</h3>
+  <div class="egg-count" id="eggCount">0 / 0</div>
+  <div class="prompt" id="prompt">Click the barn to find the eggs!</div>
+  <button class="ok" id="checkBtn" disabled>Count them!</button>
+</div>
+<div class="bubble" id="bubble">
+  <h3 id="bTitle"></h3><p id="bText"></p>
+  <div><button class="sound" id="bRead">🔊 Play sound</button><button class="close" id="bClose">✕</button></div>
+</div>
+
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script type="importmap">
+{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }
+</script>
+<script src="../assets/kid-lib.js"></script>
+<script src="../assets/models-lib.js"></script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+
+const ANIMALS=[
+  { name:'Cow', kind:'cow', color:0xf5f0e0, spot:0x3a2b20, scale:1.0, sound:'moo', freq:110, fact:'Cows say moo and give us creamy milk to drink.' },
+  { name:'Pig', kind:'pig', color:0xf2a8b8, spot:0xcf6f82, scale:1.0, sound:'oink', freq:260, fact:'Pigs are very smart and love to roll around in cool mud.' },
+  { name:'Chicken', kind:'chicken', color:0xe8d5b0, spot:0xd05a3a, scale:1.0, sound:'cluck', freq:420, fact:'Chickens say cluck and lay the eggs we eat for breakfast.' },
+  { name:'Sheep', kind:'sheep', color:0xf0ece0, spot:0xc8c2b2, scale:1.0, sound:'baa', freq:180, fact:'Sheep give us wool — the soft stuff warm sweaters are made of.' },
+  { name:'Horse', kind:'horse', color:0x8a5a3a, spot:0x5a3a22, scale:1.0, real:{url:'../assets/models/horse.glb',height:2.2}, sound:'neigh', freq:200, fact:'Horses are strong and can run very fast. Some pull carts or carry people.' },
+  { name:'Duck', kind:'duck', color:0xe8e2c8, spot:0x3a6a4a, scale:1.0, real:{url:'../assets/models/duck-real.glb',height:0.75}, sound:'quack', freq:380, fact:'Ducks love water and their webbed feet help them paddle across ponds.' },
+];
+
+// WebAudio animal sounds
+const actx = (()=>{ try{ return new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } })();
+function playSound(kind){
+  if(!actx) return; if(actx.state==='suspended') actx.resume();
+  const t0=actx.currentTime, osc=actx.createOscillator(), g=actx.createGain();
+  osc.connect(g); g.connect(actx.destination); g.gain.setValueAtTime(0.001,t0);
+  g.gain.exponentialRampToValueAtTime(0.5,t0+0.03); g.gain.exponentialRampToValueAtTime(0.001,t0+0.7);
+  osc.type='square';
+  if(kind==='moo'){ osc.frequency.setValueAtTime(110,t0); osc.frequency.linearRampToValueAtTime(90,t0+0.5); osc.frequency.linearRampToValueAtTime(120,t0+0.7); }
+  else if(kind==='oink'){ osc.frequency.setValueAtTime(260,t0); osc.frequency.linearRampToValueAtTime(330,t0+0.18); osc.frequency.linearRampToValueAtTime(240,t0+0.4); }
+  else if(kind==='cluck'){ let f=420; for(let i=0;i<4;i++){ osc.frequency.setValueAtTime(f,t0+i*0.13); osc.frequency.setValueAtTime(f*1.5,t0+i*0.13+0.05); f*=1.1; } }
+  else if(kind==='baa'){ osc.frequency.setValueAtTime(180,t0); osc.frequency.linearRampToValueAtTime(150,t0+0.3); osc.frequency.linearRampToValueAtTime(190,t0+0.5); }
+  else if(kind==='neigh'){ let f=200; for(let i=0;i<6;i++){ osc.frequency.setValueAtTime(f,t0+i*0.12); f = i%2? f*1.3 : f*0.85; } }
+  else if(kind==='quack'){ let f=380; for(let i=0;i<3;i++){ osc.frequency.setValueAtTime(f,t0+i*0.2); osc.frequency.setValueAtTime(f*1.4,t0+i*0.2+0.08); } }
+  osc.start(t0); osc.stop(t0+0.9);
+}
+
+// ground texture
+const groundTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=512; const g=c.getContext('2d'); g.fillStyle='#4f8f30'; g.fillRect(0,0,512,512); for(let i=0;i<2000;i++){ g.fillStyle='rgba(30,60,15,'+(0.08+Math.random()*0.2)+')'; g.beginPath(); g.arc(Math.random()*512,Math.random()*512,2+Math.random()*6,0,7); g.fill(); } const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,3); return t; })();
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x9fd0b0); scene.fog=new THREE.Fog(0x9fd0b0, 55, 140);
+const camera=new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 400);
+camera.position.set(0,9,22);
+const renderer=new THREE.WebGLRenderer({ antialias:true });
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.92;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x3a86d8, bottom: 0xe4f2dc, sun: new THREE.Vector3(-0.4, 0.55, -0.75), sunSize: 120 },
+  bloom: 'gentle'
+});
+window.fx = fx;
+/* HDR from Realism.setup provides the environment */
+KidLib.ambience('crickets');
+const controls=new OrbitControls(camera, renderer.domElement);
+controls.enableDamping=true; controls.target.set(0,2,0); controls.maxDistance=55; controls.minDistance=5;
+
+scene.add(new THREE.AmbientLight(0xc8e8ff, 0.75));
+const sun=new THREE.DirectionalLight(0xfff5d8, 1.6); sun.position.set(12,20,10); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.camera.left=-28; sun.shadow.camera.right=28; sun.shadow.camera.top=28; sun.shadow.camera.bottom=-28; scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xd0ffe0, 0x3f5a2f, 0.45));
+
+const ground=new THREE.Mesh(new THREE.CircleGeometry(40,56), new THREE.MeshStandardMaterial({ map:groundTex, roughness:1 })); ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+// pond
+const pond=new THREE.Mesh(new THREE.CircleGeometry(4,32), new THREE.MeshStandardMaterial({ color:0x3f7fbf, roughness:0.2, metalness:0.2 })); pond.rotation.x=-Math.PI/2; pond.position.set(0,0.02,-19); scene.add(pond);
+
+// fence around field (posts + properly aligned rails)
+(function(){
+  const mat=new THREE.MeshStandardMaterial({ color:0xb8905a, roughness:0.9 });
+  const N=30, R=24;
+  const postPts=[];
+  for(let k=0;k<N;k++){
+    const a=k/N*Math.PI*2;
+    const x=Math.cos(a)*R, z=Math.sin(a)*R;
+    postPts.push(new THREE.Vector3(x,0,z));
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.13,1.7,8), mat);
+    post.position.set(x,0.85,z); post.castShadow=true; scene.add(post);
+  }
+  // rails: align a cylinder between two posts
+  const dir=new THREE.Vector3(), mid=new THREE.Vector3(), up=new THREE.Vector3(0,1,0);
+  for(let k=0;k<N;k++){
+    const a=postPts[k], b=postPts[(k+1)%N];
+    dir.subVectors(b,a); const len=dir.length();
+    for(const h of [0.65,1.25]){
+      const rail=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,len,6), mat);
+      mid.addVectors(a,b).multiplyScalar(0.5); mid.y=h;
+      rail.position.copy(mid);
+      rail.quaternion.setFromUnitVectors(up, dir.clone().normalize());
+      rail.castShadow=true; scene.add(rail);
+    }
+  }
+})();
+
+// hay bales
+(function(){ const mat=new THREE.MeshStandardMaterial({ color:0xd8c06a, roughness:1 }); for(let i=0;i<5;i++){ const b=new THREE.Mesh(new THREE.CylinderGeometry(0.7,0.7,1.6,12), mat); b.position.set(-10+i*1.8, 0.7, 10); b.rotation.z=Math.PI/2; b.castShadow=true; scene.add(b); } })();
+
+function buildAnimal(a){
+  const b=ModelsLib.BUILDERS[a.kind];
+  if(!b){ return new THREE.Group(); }
+  const built=b(a);
+  built.group.scale.setScalar(a.scale||1);
+  return built;
+}
+
+const animals=[];
+ANIMALS.forEach((a,i)=>{ const b=buildAnimal(a); const g=b.group; const angle=(i/ANIMALS.length)*Math.PI*2; g.position.set(Math.cos(angle)*8, 0, Math.sin(angle)*8); g.rotation.y=-angle; const lbl=KidLib.makeLabel(a.name); lbl.position.y=3.2; g.add(lbl); scene.add(g); animals.push({data:a, group:g, anim:b.anim});
+  if(a.real){ ModelsLib.useReal(scene, g, a.real.url, { targetHeight: a.real.height, label: lbl }); } });
+
+// barn with texture
+const barnTex=(()=>{ const c=document.createElement('canvas'); c.width=c.height=256; const g=c.getContext('2d'); g.fillStyle='#a83222'; g.fillRect(0,0,256,256); for(let i=0;i<60;i++){ g.fillStyle=Math.random()<0.5?'#8f2a1a':'#c0402e'; g.fillRect(Math.random()*256, Math.random()*256, 18, 10); } const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; return t; })();
+const barn=new THREE.Group();
+const barnBody=new THREE.Mesh(new THREE.BoxGeometry(4,3,3), new THREE.MeshStandardMaterial({ map:barnTex, roughness:0.9 })); barnBody.position.y=1.5; barnBody.castShadow=true; barn.add(barnBody);
+const roof=new THREE.Mesh(new THREE.ConeGeometry(2.8,1.8,4), new THREE.MeshStandardMaterial({ color:0x4f2f18 })); roof.position.y=3.9; roof.rotation.y=Math.PI/4; roof.castShadow=true; barn.add(roof);
+const door=new THREE.Mesh(new THREE.PlaneGeometry(1.4,2), new THREE.MeshStandardMaterial({ color:0x3f2418 })); door.position.set(0,1,1.52); barn.add(door);
+barn.position.set(0,0,-16); barn.rotation.y=Math.PI; scene.add(barn);
+
+const N_EGGS=7, eggs=[];
+for(let i=0;i<N_EGGS;i++){ const e=new THREE.Mesh(new THREE.SphereGeometry(0.22,12,12), new THREE.MeshStandardMaterial({ color:0xfff2d0, roughness:0.4 })); e.scale.set(1,1.3,1); e.position.set((Math.random()-0.5)*2.4, 0.3, (Math.random()-0.5)*2.4); e.visible=false; barn.add(e); eggs.push(e); }
+let eggsRevealed=false;
+
+KidLib.pulse(scene, animals[0].group.position, 0xffd166);
+const bubble=document.getElementById('bubble'), bTitle=document.getElementById('bTitle'), bText=document.getElementById('bText');
+let currentAnim=null;
+function showInfo(i){ const a=animals[i]; currentAnim=i; bTitle.textContent=a.data.name; bText.textContent=`${a.data.name} says... ${a.data.fact}`; bubble.classList.add('show'); playSound(a.data.sound); }
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>{ if(currentAnim!=null){ playSound(animals[currentAnim].data.sound); } KidLib.speak(bText.textContent); };
+
+const eggCountEl=document.getElementById('eggCount'), promptEl=document.getElementById('prompt'), checkBtn=document.getElementById('checkBtn');
+checkBtn.onclick=()=>{ const visible=eggs.filter(e=>e.visible).length; if(visible===N_EGGS){ promptEl.textContent='🎉 You found all 7 eggs! You are a counting star!'; eggCountEl.textContent='7 / 7'; checkBtn.disabled=true; } else { promptEl.textContent=`You see ${visible} eggs. Keep looking — there are more hiding!`; } };
+
+const raycaster=new THREE.Raycaster(), pointer=new THREE.Vector2();
+function findFarmRoot(obj){
+  let o=obj;
+  while(o){
+    if(o===barn) return 'barn';
+    for(let i=0;i<animals.length;i++){ if(animals[i].group===o) return i; }
+    o=o.parent;
+  }
+  return -1;
+}
+renderer.domElement.addEventListener('pointerdown',e=>{ pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=-(e.clientY/innerHeight)*2+1; raycaster.setFromCamera(pointer,camera); const hits=raycaster.intersectObjects(scene.children,true); for(const h of hits){
+  const found=findFarmRoot(h.object);
+  if(found==='barn'){ if(!eggsRevealed){ eggsRevealed=true; eggs.forEach(x=>x.visible=true); promptEl.textContent='Count the eggs you see, then press "Count them!"'; eggCountEl.textContent=`0 / ${N_EGGS}`; checkBtn.disabled=false; } return; }
+  if(typeof found==='number'&&found>=0){ showInfo(found); return; } } });
+
+const clock=new THREE.Clock();
+(function animate(){ requestAnimationFrame(animate); const t=clock.getElapsedTime();
+  animals.forEach((a,i)=>{ if(a.anim){ a.anim(t,i); } else { a.group.rotation.y+=0.004; } });
+  controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera); })();
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+const TIPS=[
+  'Farm animals give us food like milk, eggs, and meat.',
+  'Many farm animals live in groups called herds or flocks.',
+  'Animals use sounds, smells, and body language to talk.',
+  'A baby cow is called a calf.',
+  'A baby sheep is called a lamb.'
+];
+const QUIZ=[
+  {q:'What sound does a cow make?', opts:['Moo','Baa','Oink'], ans:0},
+  {q:'Which animal gives us wool?', opts:['Cow','Sheep','Pig'], ans:1},
+  {q:'Which animal lays the eggs we eat?', opts:['Horse','Duck','Chicken'], ans:2},
+  {q:'Where do pigs love to roll?', opts:['In mud','In snow','In sand'], ans:0},
+  {q:'A baby sheep is called a?', opts:['Calf','Lamb','Foal'], ans:1}
+];
+window.__MORE={
+  'Cow':['Cows have four stomachs to help digest grass.','A cow can produce lots of milk every day.'],
+  'Pig':['Pigs are very clean animals, despite what you might hear.','Piglets love to snuggle and sleep together.'],
+  'Chicken':['Chickens can remember more than 100 faces.','A hen lays about one egg almost every day.'],
+  'Sheep':['Sheep have excellent memories and can recognize faces.','Wool grows back after shearing, just like your hair.'],
+  'Horse':['Horses can sleep standing up.','A horse\'s teeth keep growing all its life.'],
+  'Duck':['Ducks have waterproof feathers thanks to a special oil.','Baby ducks are called ducklings.']
+};
+KidLib.init({tips:TIPS, quiz:QUIZ});
+</script>
+</body>
+</html>

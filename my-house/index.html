@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My House — 3D Simulator</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif;overflow:hidden;background:#c8d8e8;color:#1a2540}
+  #app{position:fixed;inset:0}
+  #err{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#5a1020;border:3px solid #ff8f8f;padding:18px 24px;border-radius:14px;color:#ffd2d2;font-size:1rem;display:none;z-index:50;max-width:90vw}
+  .hud{position:fixed;top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:10}
+  .title{font-size:1.4rem;font-weight:700;color:#fff;text-shadow:0 2px 6px rgba(0,0,0,.4)}
+  .sub{font-size:.85rem;color:#e8f0fa}
+  .back{pointer-events:auto;text-decoration:none;color:#fff;background:rgba(0,0,0,.3);border:2px solid rgba(255,255,255,.5);padding:8px 14px;border-radius:999px;font-size:.9rem}
+  .back:hover{background:rgba(0,0,0,.5)}
+  .bubble{position:fixed;left:50%;bottom:210px;transform:translateX(-50%);background:rgba(20,30,50,.96);border:3px solid rgba(150,180,255,.5);border-radius:24px;padding:18px 24px;max-width:min(90vw,440px);text-align:center;z-index:20;box-shadow:0 12px 40px rgba(0,0,0,.5);color:#fff;opacity:0;pointer-events:none;transition:opacity .3s}
+  .bubble.show{opacity:1;pointer-events:auto}
+  .bubble h3{font-size:1.35rem;margin-bottom:6px}
+  .bubble p{font-size:1.05rem;line-height:1.5}
+  .bubble .sound{margin-top:10px;background:#9fc0ff;color:#101a30;border:none;border-radius:999px;padding:10px 18px;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit}
+  .bubble .close{margin-left:8px;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:999px;padding:10px 16px;font-size:1rem;cursor:pointer;font-family:inherit}
+  .strip{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:15;flex-wrap:wrap;justify-content:center}
+  .btn{padding:8px 14px;border-radius:999px;border:3px solid rgba(0,0,0,.15);cursor:pointer;background:rgba(255,255,255,.9);color:#1a2540;font-family:inherit;font-size:.9rem;font-weight:700;transition:transform .15s,border-color .15s}
+  .btn:hover{transform:scale(1.08);border-color:#4a6ab0}
+  .btn.active{border-color:#ffd166;box-shadow:0 0 12px rgba(255,209,102,.6)}
+  .hint{position:fixed;bottom:142px;left:50%;transform:translateX(-50%);color:#4a5a7a;font-size:.85rem;text-align:center;z-index:12;pointer-events:none;text-shadow:0 1px 3px rgba(255,255,255,.6)}
+</style>
+</head>
+<body>
+<div id="app"></div><div id="err"></div>
+<div class="hud"><div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 10.8 12 3l9.5 7.8"/>
+    <path d="M5 10v11h14V10"/>
+    <path d="M9.5 21v-6.2h5V21"/></svg>My House<div class="sub">Tap a room to learn what happens there</div></div><a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a></div>
+<div class="bubble" id="bubble"><h3 id="bTitle"></h3><p id="bText"></p><div><button class="sound" id="bRead">🔊 Read aloud</button><button class="close" id="bClose">✕</button></div></div>
+<div class="hint">Tap a room or its button</div><div class="strip" id="strip"></div>
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script src="../assets/kid-lib.js"></script>
+<script src="../assets/models-lib.js"></script>
+<script type="importmap">{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+try {
+const DATA=[
+  {name:'Kitchen',color:0xffd8a8,y:1.2,fact:'The kitchen is where food is cooked. We make meals there.'},
+  {name:'Living Room',color:0xd8a8b8,y:1.2,fact:'The living room is for relaxing, playing, and spending time with family.'},
+  {name:'Bedroom',color:0xa8b8d8,y:1.6,fact:'The bedroom is where we sleep and rest at night.'},
+  {name:'Bathroom',color:0xa8d8e8,y:1.2,fact:'In the bathroom we brush our teeth, wash, and take baths.'},
+  {name:'Garden',color:0xa8d8a8,y:0.4,fact:'The garden is the outdoor space with plants where we can play.'},
+  {name:'Garage',color:0xc8b8a8,y:0.8,fact:'The garage is where cars are kept and tools are stored.'}
+];
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xc8d8e8);scene.fog=new THREE.Fog(0xc8d8e8,40,100);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,400);camera.position.set(0,13,26);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.0;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x2f6fcf, bottom: 0xcfe2f0, sun: new THREE.Vector3(0.3, 0.55, -0.8), sunSize: 100 },
+  bloom: 'soft'
+});
+window.fx = fx;/* HDR from Realism.setup provides the environment */KidLib.ambience('breeze');
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,2,0);controls.maxDistance=50;controls.minDistance=6;
+scene.add(new THREE.AmbientLight(0xffffff,0.85));
+const sun=new THREE.DirectionalLight(0xfff5d8,1.5);sun.position.set(10,20,8);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xe8f0ff,0x5a6a8a,0.5));
+const ground=new THREE.Mesh(new THREE.CircleGeometry(28,56),new THREE.MeshStandardMaterial({color:0x5a8a5a,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+// house shell
+const house=new THREE.Group();
+const walls=new THREE.Mesh(new THREE.BoxGeometry(10,4,8),new THREE.MeshStandardMaterial({color:0xf0e8e0,roughness:0.8}));walls.position.y=2;walls.castShadow=true;house.add(walls);
+const roof=new THREE.Mesh(new THREE.ConeGeometry(7,3,4),new THREE.MeshStandardMaterial({color:0xc86a4a}));roof.position.y=5.5;roof.rotation.y=Math.PI/4;roof.castShadow=true;house.add(roof);
+const door=new THREE.Mesh(new THREE.BoxGeometry(1.2,2.2,0.2),new THREE.MeshStandardMaterial({color:0x6a4a2a}));door.position.set(0,1.1,4.1);house.add(door);
+house.position.set(0,0,-13); house.scale.setScalar(0.72);scene.add(house);
+KidLib.pulse(scene, new THREE.Vector3(0,2,3), 0xffd166);
+// rooms: boxes in 3x2 grid around house
+function furnish(kind, g){
+  const wood=new THREE.MeshStandardMaterial({color:0x9a6a3a,roughness:0.8});
+  const white=new THREE.MeshStandardMaterial({color:0xf5f2ec,roughness:0.6});
+  const metal=new THREE.MeshStandardMaterial({color:0xc8ccd4,roughness:0.3,metalness:0.8});
+  const add=(mesh,x,y,z,ry)=>{ mesh.position.set(x,y,z); if(ry!==undefined)mesh.rotation.y=ry; mesh.castShadow=true; g.add(mesh); return mesh; };
+  if(kind==='Kitchen'){
+    add(new THREE.Mesh(new THREE.BoxGeometry(2.4,0.9,0.7),wood),0,0.45,-1.2);
+    add(new THREE.Mesh(new THREE.BoxGeometry(2.4,0.08,0.75),white),0,0.92,-1.2);
+    const stove=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.9,0.65),new THREE.MeshStandardMaterial({color:0x5a5a62,roughness:0.5,metalness:0.4})); add(stove,1.0,0.45,-1.2);
+    for(let k=0;k<4;k++) add(new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.11,0.03,12),new THREE.MeshStandardMaterial({color:0x2a2a2a})),0.8+(k%2)*0.35,0.93,-1.35+Math.floor(k/2)*0.3);
+    const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.2,0.24,16),metal); add(pot,-0.6,1.08,-1.2);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.6,0.7,0.6),white),-0.9,0.35,1.1);
+    const fridge=new THREE.Mesh(new THREE.BoxGeometry(0.8,2.0,0.7),white); add(fridge,-1.35,1.0,0.9);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.05,0.4,0.05),metal),-1.0,0.9,1.46);
+  }
+  else if(kind==='Living Room'){
+    const sofa=new THREE.Mesh(new THREE.BoxGeometry(1.9,0.45,0.85),new THREE.MeshStandardMaterial({color:0x8a6a9a,roughness:0.9})); add(sofa,0,0.3,0.9);
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.9,0.7,0.3),new THREE.MeshStandardMaterial({color:0x8a6a9a,roughness:0.9})),0,0.75,1.25);
+    for(const s of [-1,1]) add(new THREE.Mesh(new THREE.BoxGeometry(0.25,0.5,0.85),new THREE.MeshStandardMaterial({color:0x7a5a8a,roughness:0.9})),s*0.95,0.55,0.9);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.08,20),wood),0,0.3,-0.4);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,0.35,10),wood),0,0.15,-0.4);
+    const lamp=new THREE.Mesh(new THREE.ConeGeometry(0.24,0.3,14,1,true),new THREE.MeshStandardMaterial({color:0xf0d8a0,roughness:0.8})); add(lamp,1.1,0.9,1.1);
+    const tv=new THREE.Mesh(new THREE.BoxGeometry(1.3,0.75,0.08),new THREE.MeshStandardMaterial({color:0x22222a,roughness:0.2,metalness:0.4})); add(tv,0,1.0,-1.2);
+  }
+  else if(kind==='Bedroom'){
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.6,0.35,2.2),wood),0,0.2,0);
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.55,0.22,2.1),new THREE.MeshStandardMaterial({color:0xf0f0f5,roughness:0.95})),0,0.48,0);
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.6,0.7,0.12),wood),0,0.55,-1.1);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.6,0.16,0.4),new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95})),-0.4,0.65,-0.8);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.6,0.16,0.4),new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95})),0.4,0.65,-0.8);
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.4,0.2,0.9),new THREE.MeshStandardMaterial({color:0xd88a9a,roughness:0.9})),0,0.68,0.5);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5),wood),1.1,0.25,0.8);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.14,0.3,14),new THREE.MeshStandardMaterial({color:0xf0f0f5,roughness:0.8})),1.1,0.65,0.8);
+  }
+  else if(kind==='Bathroom'){
+    // a real bathroom set-piece
+    ModelsLib.addReal(scene, '../assets/models/bathroom.glb', { targetHeight: 2.0, position:{x:0,y:0.1,z:0.2}, rotationY:Math.PI, name:'bathroomSet' });
+    const tub=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.55,0.85),white); add(tub,0,0.28,0.6);
+    add(new THREE.Mesh(new THREE.BoxGeometry(1.5,0.12,0.75),new THREE.MeshStandardMaterial({color:0xa8d8f0,roughness:0.15,metalness:0.1})),0,0.5,0.6);
+    const sink=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.2,0.5),white); add(sink,0,0.9,-1.1);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,0.25,10),metal),0,1.05,-1.25);
+    add(new THREE.Mesh(new THREE.BoxGeometry(0.5,0.7,0.1),new THREE.MeshStandardMaterial({color:0xa8d8f0,roughness:0.1,metalness:0.3})),0,1.5,-1.35);
+  }
+  else if(kind==='Garden'){
+    for(let k=0;k<4;k++){
+      const pot=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.18,0.3,14),new THREE.MeshStandardMaterial({color:0xb06a4a,roughness:0.9})); add(pot,-0.9+k*0.6,0.15,-0.9);
+      const bush=new THREE.Mesh(new THREE.SphereGeometry(0.3,14,14),new THREE.MeshStandardMaterial({color:0x3f9f3f,roughness:0.9})); add(bush,-0.9+k*0.6,0.42,-0.9);
+    }
+    const tree=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.22,1.6,10),new THREE.MeshStandardMaterial({color:0x5a3a22,roughness:0.95})); add(tree,-1.1,0.8,0.7);
+    const crown=new THREE.Mesh(new THREE.SphereGeometry(0.6,16,16),new THREE.MeshStandardMaterial({color:0x2f7f2f,roughness:0.95})); add(crown,-1.1,1.8,0.7);
+    const fence=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.1,0.08),new THREE.MeshStandardMaterial({color:0xb8905a,roughness:0.9})); add(fence,0,0.5,1.3);
+    for(let k=0;k<4;k++) add(new THREE.Mesh(new THREE.BoxGeometry(0.1,0.6,0.1),new THREE.MeshStandardMaterial({color:0xb8905a,roughness:0.9})),-0.9+k*0.6,0.3,1.3);
+  }
+  else { // Garage
+    const carBody=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.45,0.8),new THREE.MeshStandardMaterial({color:0x4a8fd8,roughness:0.3,metalness:0.5})); add(carBody,0,0.45,0);
+    const carCab=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.35,0.72),new THREE.MeshStandardMaterial({color:0x8fc4e8,roughness:0.1,metalness:0.6})); add(carCab,-0.15,0.85,0);
+    for(const x of [0.5,-0.5]) for(const z of [0.42,-0.42]){ const w=new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.14,14),new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:0.85})); w.rotation.z=Math.PI/2; add(w,x,0.22,z); }
+    const bench=new THREE.Mesh(new THREE.BoxGeometry(1.6,0.1,0.5),new THREE.MeshStandardMaterial({color:0x8a8f9a,roughness:0.7,metalness:0.3})); add(bench,0,0.6,-1.2);
+    for(const x of [-0.6,0.6]) add(new THREE.Mesh(new THREE.BoxGeometry(0.1,0.6,0.4),new THREE.MeshStandardMaterial({color:0x5a5a62,roughness:0.7})),x,0.3,-1.2);
+    for(let k=0;k<3;k++) add(new THREE.Mesh(new THREE.BoxGeometry(0.24,0.24,0.1),new THREE.MeshStandardMaterial({color:[0xc04a4a,0x4ac0c0,0xc0c04a][k],roughness:0.5})),-0.9+k*0.35,1.2,-1.35);
+  }
+}
+const rooms=[];
+DATA.forEach((d,i)=>{
+  const g=new THREE.Group();
+  // an open "dollhouse" room: a floor plate, a back wall and low side walls,
+  // so the furniture inside is always visible
+  const floor=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.16,3.4), new THREE.MeshStandardMaterial({ color:d.color, roughness:0.9 }));
+  floor.position.y=0.08; floor.receiveShadow=true; floor.castShadow=true; g.add(floor);
+  const backWall=new THREE.Mesh(new THREE.BoxGeometry(3.4,2.2,0.12), new THREE.MeshStandardMaterial({ color:d.color, roughness:0.92 }));
+  backWall.position.set(0,1.1,-1.7); backWall.receiveShadow=true; backWall.castShadow=true; g.add(backWall);
+  for(const s of [-1,1]){
+    const side=new THREE.Mesh(new THREE.BoxGeometry(0.12,1.0,3.4), new THREE.MeshStandardMaterial({ color:d.color, roughness:0.92 }));
+    side.position.set(s*1.7,0.5,0); side.receiveShadow=true; side.castShadow=true; g.add(side);
+  }
+  // skirting + a doorway opening look
+  const trim=new THREE.Mesh(new THREE.BoxGeometry(3.4,0.12,0.16), new THREE.MeshStandardMaterial({ color:0xf5f0e6, roughness:0.7 }));
+  trim.position.set(0,0.16,-1.62); g.add(trim);
+  furnish(d.name, g);
+  const cx=(i%3-1)*6.6,cz=2+Math.floor(i/3)*6.6; g.position.set(cx,0,cz); g.rotation.y=0;
+  const lbl=KidLib.makeLabel(d.name,{scale:1.4}); lbl.position.y=3.0; g.add(lbl);
+  scene.add(g); rooms.push({data:d,group:g});
+});
+const strip=document.getElementById('strip');
+rooms.forEach((d,idx)=>{const b=document.createElement('button');b.className='btn';b.textContent=d.data.name;b.addEventListener('click',()=>showInfo(idx));strip.appendChild(b);});
+const bubble=document.getElementById('bubble'),bTitle=document.getElementById('bTitle'),bText=document.getElementById('bText');
+function showInfo(idx){const d=rooms[idx];bTitle.textContent=d.data.name;bText.textContent=d.data.fact;bubble.classList.add('show');document.querySelectorAll('.btn').forEach(x=>x.classList.remove('active'));strip.children[idx].classList.add('active');}
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown',e=>{pointer.x=(e.clientX/innerWidth)*2-1;pointer.y=-(e.clientY/innerHeight)*2+1;raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(scene.children,true);for(const h of hits){for(let i=0;i<rooms.length;i++){if(rooms[i].group.children.includes(h.object)){showInfo(i);return;}}}});
+const clock=new THREE.Clock();
+(function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();rooms.forEach((d,i)=>{d.group.rotation.y=Math.sin(t*0.3+i)*0.1;});controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera);})();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+} catch(err){document.getElementById('err').style.display='block';document.getElementById('err').textContent='Oops! Something went wrong: '+err.message;}
+</script>
+<script>
+const TIPS=['A home keeps us warm, dry, and safe.','Every room in a house has a job.','We can help by tidying up our rooms.','Safe homes have smoke alarms.','A house is a place for family and friends.'];
+const QUIZ=[{q:'Where do we cook food?',opts:['Kitchen','Bedroom','Garden'],ans:0},{q:'Where do we sleep?',opts:['Bedroom','Kitchen','Garage'],ans:0},{q:'Where do we brush our teeth?',opts:['Bathroom','Living Room','Garden'],ans:0},{q:'Where is the car kept?',opts:['Garage','Kitchen','Bedroom'],ans:0},{q:'Where do plants grow outdoors?',opts:['Garden','Bathroom','Garage'],ans:0}];
+window.__MORE={'Kitchen':['The kitchen has the fridge to keep food cold.','We must be careful with hot stoves.'],'Living Room':['Families often relax together here.','It is a good place to read.'],'Bedroom':['Sleep helps us grow and stay healthy.','A cozy quiet room helps us sleep.'],'Bathroom':['Washing hands keeps germs away.','We save water by turning off the tap.'],'Garden':['Plants need sun and water.','Gardens can be home to insects and birds.'],'Garage':['Tools help us fix and build things.','Garages keep cars safe from weather.' ]};
+KidLib.init({tips:TIPS,quiz:QUIZ});
+</script>
+</body>
+</html>

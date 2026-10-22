@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rainforest Layers — 3D Simulator</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:"Comic Sans MS","Chalkboard SE","Segoe UI",sans-serif;overflow:hidden;background:#062d12;color:#fff}
+  #app{position:fixed;inset:0}
+  #err{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#5a1020;border:3px solid #ff8f8f;padding:18px 24px;border-radius:14px;color:#ffd2d2;font-size:1rem;display:none;z-index:50;max-width:90vw}
+  .hud{position:fixed;top:0;left:0;right:0;padding:14px 18px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:10}
+  .title{font-size:1.4rem;font-weight:700;text-shadow:0 2px 8px rgba(0,0,0,.8)}
+  .sub{font-size:.85rem;color:#b8e8c0}
+  .back{pointer-events:auto;text-decoration:none;color:#fff;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.32);padding:8px 14px;border-radius:999px;font-size:.9rem}
+  .back:hover{background:rgba(255,255,255,.3)}
+  .bubble{position:fixed;left:50%;bottom:210px;transform:translateX(-50%);background:rgba(6,34,16,.97);border:3px solid rgba(150,240,160,.45);border-radius:24px;padding:18px 24px;max-width:min(90vw,440px);text-align:center;z-index:20;box-shadow:0 12px 40px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:opacity .3s}
+  .bubble.show{opacity:1;pointer-events:auto}
+  .bubble h3{font-size:1.35rem;margin-bottom:6px;color:#d8ffcc}
+  .bubble p{font-size:1.05rem;line-height:1.5}
+  .bubble .sound{margin-top:10px;background:#9fce6a;color:#1d2a0e;border:none;border-radius:999px;padding:10px 18px;font-size:1rem;font-weight:700;cursor:pointer;font-family:inherit}
+  .bubble .close{margin-left:8px;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:999px;padding:10px 16px;font-size:1rem;cursor:pointer;font-family:inherit}
+  .strip{position:fixed;bottom:86px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:15;flex-wrap:wrap;justify-content:center}
+  .btn{padding:8px 14px;border-radius:999px;border:3px solid rgba(255,255,255,.35);cursor:pointer;background:rgba(10,40,22,.85);color:#fff;font-family:inherit;font-size:.9rem;font-weight:700;transition:transform .15s,border-color .15s}
+  .btn:hover{transform:scale(1.08);border-color:#fff}
+  .btn.active{border-color:#9fce6a;box-shadow:0 0 12px rgba(159,206,106,.6)}
+  .hint{position:fixed;bottom:142px;left:50%;transform:translateX(-50%);color:#b8e8c0;font-size:.85rem;text-align:center;z-index:12;pointer-events:none;text-shadow:0 1px 5px #000}
+</style>
+</head>
+<body>
+<div id="app"></div><div id="err"></div>
+<div class="hud"><div><div class="title"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 6.5 10h3L4.5 17h15L14.5 10h3Z"/>
+    <path d="M12 17v4"/>
+    <path d="M4.5 21h15"/>
+    <path d="M2 14.5 4 11h1.5L3.5 8.5h2L4 5" opacity=".5"/></svg>Rainforest Layers<div class="sub">Tap an animal to learn which layer it lives in</div></div><a class="back" href="../index.html"><svg class="t-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7"/></svg>Home</a></div>
+<div class="bubble" id="bubble"><h3 id="bTitle"></h3><p id="bText"></p><div><button class="sound" id="bRead">🔊 Read aloud</button><button class="close" id="bClose">✕</button></div></div>
+<div class="hint">Tap an animal or its button</div><div class="strip" id="strip"></div>
+<link rel="stylesheet" href="../assets/kid-lib.css">
+<script src="../assets/kid-lib.js"></script>
+<script src="../assets/models-lib.js"></script>
+<script type="importmap">{ "imports": { "three":"https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import '../assets/realism.js';
+window.__THREE = THREE;
+try {
+const DATA=[
+  {name:'Toucan',kind:'toucan',color:0x111111,beak:0xff8c2f,layer:'Canopy',y:7.2,real:{url:'../assets/models/parrot.glb',height:0.9},scale:1.0,fact:'Toucans live high in the canopy. Their big bright beak helps them reach fruit.'},
+  {name:'Sloth',kind:'sloth',color:0x8a7a5a,layer:'Canopy',y:6.2,scale:1.0,fact:'Sloths are slow and hang from branches upside down in the canopy.'},
+  {name:'Monkey',kind:'monkey',color:0x7a5a3a,layer:'Mid',y:4.4,scale:0.85,fact:'Monkeys swing through the middle layer of the forest using their tails.'},
+  {name:'Parrot',kind:'parrot',color:0x2f9f4f,wing:0xe85a2f,layer:'Mid',y:4.0,scale:0.9,fact:'Colorful parrots squawk and fly through the middle of the rainforest.'},
+  {name:'Jaguar',kind:'jaguar',color:0xd9a95a,layer:'Floor',y:0.9,scale:0.85,fact:'The jaguar is a big cat that hunts on the forest floor.'},
+  {name:'Poison Frog',kind:'poisonfrog',color:0xff8c2f,layer:'Floor',y:0.3,scale:1.0,fact:'Tiny but bright frogs live on the forest floor. Their colors warn predators!'}
+];
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x062d12);scene.fog=new THREE.Fog(0x062d12,40,110);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,400);camera.position.set(0,9,28);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=0.95;
+document.getElementById('app').appendChild(renderer.domElement);
+const fx = Realism.setup(scene, renderer, camera, {
+  hdr: "../assets/hdr/sky-park-small.hdr",
+  sky: 'gradient',
+  skyOptions: { top: 0x2f7f4f, bottom: 0x9fc890, sun: new THREE.Vector3(0.2, 0.7, -0.6), sunSize: 90 },
+  bloom: 'gentle'
+});
+window.fx = fx;/* HDR from Realism.setup provides the environment */KidLib.ambience('forest');
+const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.target.set(0,3.5,0);controls.maxDistance=45;controls.minDistance=5;
+scene.add(new THREE.AmbientLight(0x66aa66,0.8));
+const sun=new THREE.DirectionalLight(0xfff0c0,1.5);sun.position.set(6,18,6);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);scene.add(sun);
+scene.add(new THREE.HemisphereLight(0x88cc88,0x062d12,0.5));
+// giant trunk
+const trunk=new THREE.Mesh(new THREE.CylinderGeometry(2.2,3.2,14,12),new THREE.MeshStandardMaterial({color:0x4a3020,roughness:0.95}));trunk.position.y=7;trunk.castShadow=true;scene.add(trunk);
+// canopy sphere up high
+const canopy=new THREE.Mesh(new THREE.SphereGeometry(9,20,20),new THREE.MeshStandardMaterial({color:0x1f5f24,roughness:0.95}));canopy.position.y=13;canopy.castShadow=true;scene.add(canopy);
+// ground
+const ground=new THREE.Mesh(new THREE.CircleGeometry(24,48),new THREE.MeshStandardMaterial({color:0x2f4f2a,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
+// light shafts
+for(let i=0;i<4;i++){const shaft=new THREE.Mesh(new THREE.PlaneGeometry(4,14),new THREE.MeshBasicMaterial({color:0xd8f0c0,transparent:true,opacity:0.12,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending}));shaft.position.set((i-1.5)*6,7,-4+Math.random()*6);shaft.rotation.z=0.3;scene.add(shaft);}
+function build(a){
+  const b=ModelsLib.BUILDERS[a.kind];
+  if(!b){ return new THREE.Group(); }
+  const built=b(a);
+  built.group.scale.setScalar(a.scale||1);
+  return built;
+}
+const animals=[];
+DATA.forEach((d,i)=>{const b=build(d);const g=b.group;g.position.set((Math.random()-0.5)*10,d.y,(Math.random()-0.5)*10);g.rotation.y=Math.random()*Math.PI*2;const lbl=KidLib.makeLabel(d.name,{scale:1.2});lbl.position.y=1.8;g.add(lbl);scene.add(g);animals.push({data:d,group:g,anim:b.anim}); if(d.real){ ModelsLib.useReal(scene, g, d.real.url, { targetHeight: d.real.height, label: lbl }); }});
+KidLib.pulse(scene, animals[0].group.position);
+const strip=document.getElementById('strip');
+animals.forEach((d,idx)=>{const b=document.createElement('button');b.className='btn';b.textContent=d.data.name;b.addEventListener('click',()=>showInfo(idx));strip.appendChild(b);});
+const bubble=document.getElementById('bubble'),bTitle=document.getElementById('bTitle'),bText=document.getElementById('bText');
+function showInfo(idx){const d=animals[idx];bTitle.textContent=d.data.name;bText.textContent=`${d.data.layer} layer. ${d.data.fact}`;bubble.classList.add('show');document.querySelectorAll('.btn').forEach(x=>x.classList.remove('active'));strip.children[idx].classList.add('active');}
+document.getElementById('bClose').onclick=()=>bubble.classList.remove('show');
+document.getElementById('bRead').onclick=()=>KidLib.speak(`${bTitle.textContent}. ${bText.textContent}`);
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+renderer.domElement.addEventListener('pointerdown',e=>{pointer.x=(e.clientX/innerWidth)*2-1;pointer.y=-(e.clientY/innerHeight)*2+1;raycaster.setFromCamera(pointer,camera);const hits=raycaster.intersectObjects(scene.children,true);for(const h of hits){for(let i=0;i<animals.length;i++){if(animals[i].group.children.includes(h.object)){showInfo(i);return;}}}});
+const clock=new THREE.Clock();
+(function animate(){requestAnimationFrame(animate);const t=clock.getElapsedTime();animals.forEach((d,i)=>{ if(d.anim){ d.anim(t,i); } else { d.group.rotation.y+=0.005; } });controls.update(); if(window.KidLib)KidLib.updateLabels(scene,camera); fx.render(scene, camera);})();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+} catch(err){document.getElementById('err').style.display='block';document.getElementById('err').textContent='Oops! Something went wrong: '+err.message;}
+</script>
+<script>
+const TIPS=['A rainforest has layers like a tall building.','The canopy is the leafy roof of the forest.','The forest floor is dark and damp.','Rainforests are home to more than half of all animals.','Rain means plants grow tall and green.'];
+const QUIZ=[{q:'Which layer is the highest?',opts:['Canopy','Floor','Mid'],ans:0},{q:'Where does the jaguar live?',opts:['Floor','Canopy','Mid'],ans:0},{q:'Which animal hangs upside down?',opts:['Sloth','Toucan','Frog'],ans:0},{q:'What do toucans use their big beak for?',opts:['Reaching fruit','Swimming','Digging'],ans:0},{q:'The forest floor is usually?',opts:['Dark and damp','Bright and sunny','Very cold'],ans:0}];
+window.__MORE={'Toucan':['Their beak is light even though it looks big.','Toucans also use it to keep cool.'],'Sloth':['Sloths move very slowly to save energy.','They sleep about 15 hours a day.'],'Monkey':['Monkeys use their tail like an extra hand.','They live in groups called troops.'],'Parrot':['Parrots can copy sounds and words.','They eat seeds, fruit, and nuts.'],'Jaguar':['Jaguars are excellent swimmers.','Their spots are called rosettes.'],'Poison Frog':['Their bright color warns predators.','Some are tiny but very poisonous.' ]};
+KidLib.init({tips:TIPS,quiz:QUIZ});
+</script>
+</body>
+</html>
